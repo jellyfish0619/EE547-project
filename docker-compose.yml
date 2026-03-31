@@ -1,0 +1,50 @@
+services:
+  api:
+    build: ./backend
+    command: uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+    ports:
+      - "8000:8000"
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - model-cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build: ./backend
+    command: python worker/main.py
+    env_file: .env
+    volumes:
+      - ./backend:/app
+      - model-cache:/root/.cache/huggingface
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: coursemate
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  frontend:
+    image: nginx:alpine
+    ports:
+      - "3000:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html
+
+volumes:
+  pgdata:
+  model-cache:

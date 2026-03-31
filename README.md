@@ -22,15 +22,15 @@ backend/
   ├── api/人员 A
   │   ├── main.pyFastAPI 入口
   │   ├── routers/
-  │   │   ├── auth.py注册/登录
-  │   │   ├── courses.py
-  │   │   ├── documents.py上传PDF、查状态
-  │   │   ├── qa.py问答接口
-  │   │   └── quiz.py
+  │   │   ├── auth.py 注册和登录接口
+  │   │   ├── courses.py 课程的增删查接口
+  │   │   ├── documents.py PDF 上传和状态查询
+  │   │   ├── qa.py 问答接口
+  │   │   └── quiz.py 测验接口
   │   ├── models/
-  │   │   └── schemas.py请求/响应的数据结构
+  │   │   └── schemas.py  定义请求和响应的数据格式
   │   └── core/
-  │       ├── auth.pyJWT 逻辑
+  │       ├── auth.py JWT逻辑
   │       └── database.py数据库连接
   ├── worker/人员 B
   │   ├── main.pySQS 消费者入口
@@ -62,3 +62,10 @@ docs/
   ├── schema.sql建表语句
   └── api.md所有接口文档
 ```
+
+
+## 开发规范
+
+从github clone 后创建一个自己的分支，每次提交后需要merge的话，微信告诉我，我会合并到
+main中。定期pull最新的main。然后最好重新创造一个新的虚拟环境，python版本是3.11，
+其他所需要的依赖，都写在backend文档中的requirements.txt文件中，直接安装就行。
