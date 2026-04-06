@@ -19,6 +19,7 @@ from dotenv import load_dotenv
 
 from pdf_parser import parse_pdf
 from embedder import embed_and_store
+from llm import update_document_summary
 
 load_dotenv()
 
@@ -29,7 +30,14 @@ load_dotenv()
 SQS_QUEUE_URL  = os.getenv("SQS_QUEUE_URL", "")
 S3_BUCKET_NAME = os.getenv("S3_BUCKET_NAME", "")
 AWS_REGION     = os.getenv("AWS_REGION", "us-east-1")
-DATABASE_URL   = os.getenv("DATABASE_URL", "")
+def _normalize_dsn(url: str) -> str:
+    for prefix in ("postgresql+psycopg2://", "postgresql+psycopg://"):
+        if url.startswith(prefix):
+            return "postgresql://" + url[len(prefix) :]
+    return url
+
+
+DATABASE_URL = _normalize_dsn(os.getenv("DATABASE_URL", ""))
 POLL_INTERVAL  = 5   # seconds between SQS polls when queue is empty
 
 
@@ -54,6 +62,10 @@ def _update_document_status(document_id: int, status: str) -> None:
 
 def _download_from_s3(s3_key: str) -> str:
     """Download a file from S3 to a temp file. Returns local path."""
+    if not S3_BUCKET_NAME:
+        raise ValueError(
+            "S3_BUCKET_NAME is not set; expected SQS message with local_path for local files"
+        )
     s3 = boto3.client("s3", region_name=AWS_REGION)
     suffix = os.path.splitext(s3_key)[-1] or ".pdf"
     tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
@@ -80,11 +92,15 @@ def process_document(document_id: int, pdf_path: str) -> None:
         print(f"[doc={document_id}] Stored {stored} chunks")
 
         _update_document_status(document_id, "ready")
+        try:
+            update_document_summary(document_id, DATABASE_URL)
+        except Exception as summary_err:
+            print(f"[doc={document_id}] Summary skipped: {summary_err}")
         print(f"[doc={document_id}] Done")
 
     except Exception as e:
         print(f"[doc={document_id}] Error: {e}")
-        _update_document_status(document_id, "error")
+        _update_document_status(document_id, "failed")
         raise
 
 
@@ -115,13 +131,21 @@ def run_worker() -> None:
         try:
             body = json.loads(msg["Body"])
             document_id = int(body["document_id"])
-            s3_key      = body["s3_key"]
-
-            pdf_path = _download_from_s3(s3_key)
+            if body.get("local_path"):
+                pdf_path = body["local_path"]
+                tmp_downloaded = False
+            else:
+                s3_key = body["s3_key"]
+                pdf_path = _download_from_s3(s3_key)
+                tmp_downloaded = True
             try:
                 process_document(document_id, pdf_path)
             finally:
-                os.unlink(pdf_path)   # clean up temp file
+                if tmp_downloaded:
+                    try:
+                        os.unlink(pdf_path)
+                    except OSError:
+                        pass
 
             # Delete message only on success
             sqs.delete_message(QueueUrl=SQS_QUEUE_URL, ReceiptHandle=receipt)
