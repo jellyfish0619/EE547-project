@@ -24,8 +24,8 @@ CREATE TABLE courses (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
-    description TEXT,
-    created_at  TIMESTAMP DEFAULT NOW()
+    description TEXT NOT NULL DEFAULT '',
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================
@@ -36,10 +36,11 @@ CREATE TABLE documents (
     id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     filename    TEXT NOT NULL,
-    s3_key      TEXT NOT NULL,       -- file path in S3
+    s3_key      TEXT,                    -- S3 object key or local pseudo-key
     status      TEXT NOT NULL DEFAULT 'pending',
-    summary     TEXT,                -- written by Worker after async generation
-    uploaded_at TIMESTAMP DEFAULT NOW()
+                                         -- pending | processing | ready | failed
+    summary     TEXT,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================
@@ -56,51 +57,44 @@ CREATE TABLE chunks (
     page_number  INT
 );
 
--- ============================================
--- QA History
--- ============================================
--- source_chunks stores referenced chunk metadata, format:
--- [{"filename": "lecture3.pdf", "page_number": 5, "content": "..."}]
-CREATE TABLE qa_history (
-    id            UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    course_id     UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    question      TEXT NOT NULL,
-    answer        TEXT NOT NULL,
-    source_chunks JSONB,
-    created_at    TIMESTAMP DEFAULT NOW()
+-- ANN index for fast cosine similarity search
+CREATE INDEX IF NOT EXISTS chunks_embedding_idx
+    ON chunks USING hnsw (embedding vector_cosine_ops);
+
+-- ---------------------------------------------------------------------------
+-- Q&A history
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS qa_history (
+    id          SERIAL PRIMARY KEY,
+    course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    question    TEXT NOT NULL,
+    answer      TEXT NOT NULL,
+    sources     JSONB NOT NULL DEFAULT '[]',
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ============================================
--- Quiz Sessions
--- ============================================
--- questions format:
--- [{"id": 1, "question": "...", "options": ["A","B","C","D"], "answer": "B"}]
--- user_answers format:
--- [{"question_id": 1, "answer": "B"}]
-CREATE TABLE quiz_sessions (
-    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    questions    JSONB NOT NULL,
-    user_answers JSONB,
-    score        INT,
-    created_at   TIMESTAMP DEFAULT NOW()
+-- ---------------------------------------------------------------------------
+-- Quiz sessions (generated questions + correct answers)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS quiz_sessions (
+    id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    questions   JSONB NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ============================================
--- Indexes
--- ============================================
-
--- Vector similarity search index (IVFFlat, cosine distance)
--- Recommended lists value: total chunks / 10, minimum 10
-CREATE INDEX idx_chunks_embedding
-ON chunks USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
-
--- Indexes for common query patterns
-CREATE INDEX idx_chunks_course_id     ON chunks(course_id);
-CREATE INDEX idx_chunks_document_id   ON chunks(document_id);
-CREATE INDEX idx_documents_course_id  ON documents(course_id);
-CREATE INDEX idx_documents_status     ON documents(status);
-CREATE INDEX idx_courses_user_id      ON courses(user_id);
-CREATE INDEX idx_qa_history_course_id ON qa_history(course_id);
-CREATE INDEX idx_quiz_course_id       ON quiz_sessions(course_id);
+-- ---------------------------------------------------------------------------
+-- Quiz attempts (submitted answers / scores)
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS quiz_attempts (
+    id          SERIAL PRIMARY KEY,
+    session_id  UUID NOT NULL REFERENCES quiz_sessions(id) ON DELETE CASCADE,
+    course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    score       INT NOT NULL,
+    total       INT NOT NULL,
+    results     JSONB NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
+);
