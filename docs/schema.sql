@@ -1,36 +1,40 @@
+-- ============================================
 -- CourseMate Database Schema
--- PostgreSQL 16 + pgvector extension
+-- PostgreSQL 16 + pgvector
+-- ============================================
 
--- Enable pgvector
+-- Enable required extensions
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
--- ---------------------------------------------------------------------------
+-- ============================================
 -- Users
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS users (
-    id          SERIAL PRIMARY KEY,
-    email       TEXT UNIQUE NOT NULL,
-    password    TEXT NOT NULL,           -- bcrypt hash
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+-- ============================================
+CREATE TABLE users (
+    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email            TEXT UNIQUE NOT NULL,
+    hashed_password  TEXT NOT NULL,
+    created_at       TIMESTAMP DEFAULT NOW()
 );
 
--- ---------------------------------------------------------------------------
+-- ============================================
 -- Courses
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS courses (
-    id          SERIAL PRIMARY KEY,
-    owner_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+-- ============================================
+CREATE TABLE courses (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ---------------------------------------------------------------------------
--- Documents (uploaded PDFs)
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS documents (
-    id          SERIAL PRIMARY KEY,
-    course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+-- ============================================
+-- Documents
+-- ============================================
+-- status values: pending / processing / ready / failed
+CREATE TABLE documents (
+    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     filename    TEXT NOT NULL,
     s3_key      TEXT,                    -- S3 object key or local pseudo-key
     status      TEXT NOT NULL DEFAULT 'pending',
@@ -39,17 +43,18 @@ CREATE TABLE IF NOT EXISTS documents (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ---------------------------------------------------------------------------
--- Chunks (text + vector embeddings — written by worker/embedder.py)
--- ---------------------------------------------------------------------------
-CREATE TABLE IF NOT EXISTS chunks (
-    id          SERIAL PRIMARY KEY,
-    document_id INT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    page        INT NOT NULL,            -- 1-based page number
-    chunk_index INT NOT NULL,            -- position within the page
-    text        TEXT NOT NULL,
-    embedding   VECTOR(384),             -- all-MiniLM-L6-v2 output
-    UNIQUE (document_id, page, chunk_index)
+-- ============================================
+-- Chunks (core table)
+-- ============================================
+-- course_id is stored redundantly to avoid JOIN with documents during vector search
+CREATE TABLE chunks (
+    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    document_id  UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+    chunk_index  INT NOT NULL,
+    content      TEXT NOT NULL,
+    embedding    vector(384),        -- all-MiniLM-L6-v2 outputs 384 dimensions
+    page_number  INT
 );
 
 -- ANN index for fast cosine similarity search
