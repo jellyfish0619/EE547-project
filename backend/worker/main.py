@@ -78,7 +78,7 @@ def _download_from_s3(s3_key: str) -> str:
 # Core pipeline
 # ---------------------------------------------------------------------------
 
-def process_document(document_id: int, pdf_path: str) -> None:
+def process_document(document_id: int, pdf_path: str, auto_summary: bool = True) -> None:
     """Run the full pipeline for one document."""
     print(f"[doc={document_id}] Starting pipeline: {pdf_path}")
 
@@ -92,10 +92,16 @@ def process_document(document_id: int, pdf_path: str) -> None:
         print(f"[doc={document_id}] Stored {stored} chunks")
 
         _update_document_status(document_id, "ready")
-        try:
-            update_document_summary(document_id, DATABASE_URL)
-        except Exception as summary_err:
-            print(f"[doc={document_id}] Summary skipped: {summary_err}")
+
+        if auto_summary:
+            try:
+                update_document_summary(document_id, DATABASE_URL)
+                print(f"[doc={document_id}] Summary generated")
+            except Exception as summary_err:
+                print(f"[doc={document_id}] Summary skipped: {summary_err}")
+        else:
+            print(f"[doc={document_id}] Summary skipped (disabled by user)")
+
         print(f"[doc={document_id}] Done")
 
     except Exception as e:
@@ -131,6 +137,7 @@ def run_worker() -> None:
         try:
             body = json.loads(msg["Body"])
             document_id = int(body["document_id"])
+            auto_summary = bool(body.get("auto_summary", True))
             if body.get("local_path"):
                 pdf_path = body["local_path"]
                 tmp_downloaded = False
@@ -139,7 +146,7 @@ def run_worker() -> None:
                 pdf_path = _download_from_s3(s3_key)
                 tmp_downloaded = True
             try:
-                process_document(document_id, pdf_path)
+                process_document(document_id, pdf_path, auto_summary)
             finally:
                 if tmp_downloaded:
                     try:
@@ -159,9 +166,9 @@ def run_worker() -> None:
 # Local test mode  (no SQS / S3 needed)
 # ---------------------------------------------------------------------------
 
-def run_local(pdf_path: str, document_id: int) -> None:
+def run_local(pdf_path: str, document_id: int, auto_summary: bool = True) -> None:
     """Test the pipeline locally with a file on disk."""
-    process_document(document_id, pdf_path)
+    process_document(document_id, pdf_path, auto_summary)
 
 
 # ---------------------------------------------------------------------------
@@ -170,8 +177,9 @@ def run_local(pdf_path: str, document_id: int) -> None:
 
 if __name__ == "__main__":
     if len(sys.argv) >= 4 and sys.argv[1] == "--local":
-        pdf  = sys.argv[2]
+        pdf    = sys.argv[2]
         doc_id = int(sys.argv[3])
-        run_local(pdf, doc_id)
+        no_summary = "--no-summary" in sys.argv
+        run_local(pdf, doc_id, auto_summary=not no_summary)
     else:
         run_worker()

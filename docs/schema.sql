@@ -3,26 +3,24 @@
 -- PostgreSQL 16 + pgvector
 -- ============================================
 
--- Enable required extensions
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS vector;
 
 -- ============================================
 -- Users
 -- ============================================
-CREATE TABLE users (
-    id               UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    email            TEXT UNIQUE NOT NULL,
-    hashed_password  TEXT NOT NULL,
-    created_at       TIMESTAMP DEFAULT NOW()
+CREATE TABLE IF NOT EXISTS users (
+    id          SERIAL PRIMARY KEY,
+    email       TEXT UNIQUE NOT NULL,
+    password    TEXT NOT NULL,
+    created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================
 -- Courses
 -- ============================================
-CREATE TABLE courses (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    user_id     UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS courses (
+    id          SERIAL PRIMARY KEY,
+    owner_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     name        TEXT NOT NULL,
     description TEXT NOT NULL DEFAULT '',
     created_at  TIMESTAMPTZ DEFAULT NOW()
@@ -30,40 +28,34 @@ CREATE TABLE courses (
 
 -- ============================================
 -- Documents
+-- status: pending / processing / ready / failed
 -- ============================================
--- status values: pending / processing / ready / failed
-CREATE TABLE documents (
-    id          UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    course_id   UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
+CREATE TABLE IF NOT EXISTS documents (
+    id          SERIAL PRIMARY KEY,
+    course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
     filename    TEXT NOT NULL,
-    s3_key      TEXT,                    -- S3 object key or local pseudo-key
+    s3_key      TEXT,
     status      TEXT NOT NULL DEFAULT 'pending',
-                                         -- pending | processing | ready | failed
     summary     TEXT,
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================
--- Chunks (core table)
+-- Chunks (written by worker/embedder.py)
 -- ============================================
--- course_id is stored redundantly to avoid JOIN with documents during vector search
-CREATE TABLE chunks (
-    id           UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    document_id  UUID NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
-    course_id    UUID NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
-    chunk_index  INT NOT NULL,
-    content      TEXT NOT NULL,
-    embedding    vector(384),        -- all-MiniLM-L6-v2 outputs 384 dimensions
-    page_number  INT
+CREATE TABLE IF NOT EXISTS chunks (
+    id          SERIAL PRIMARY KEY,
+    document_id INT NOT NULL REFERENCES documents(id) ON DELETE CASCADE,
+    page        INT NOT NULL,
+    chunk_index INT NOT NULL,
+    text        TEXT NOT NULL,
+    embedding   VECTOR(384),
+    UNIQUE (document_id, page, chunk_index)
 );
 
--- ANN index for fast cosine similarity search
-CREATE INDEX IF NOT EXISTS chunks_embedding_idx
-    ON chunks USING hnsw (embedding vector_cosine_ops);
-
--- ---------------------------------------------------------------------------
--- Q&A history
--- ---------------------------------------------------------------------------
+-- ============================================
+-- QA History
+-- ============================================
 CREATE TABLE IF NOT EXISTS qa_history (
     id          SERIAL PRIMARY KEY,
     course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -74,9 +66,9 @@ CREATE TABLE IF NOT EXISTS qa_history (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ---------------------------------------------------------------------------
--- Quiz sessions (generated questions + correct answers)
--- ---------------------------------------------------------------------------
+-- ============================================
+-- Quiz Sessions
+-- ============================================
 CREATE TABLE IF NOT EXISTS quiz_sessions (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     course_id   INT NOT NULL REFERENCES courses(id) ON DELETE CASCADE,
@@ -85,9 +77,9 @@ CREATE TABLE IF NOT EXISTS quiz_sessions (
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- ---------------------------------------------------------------------------
--- Quiz attempts (submitted answers / scores)
--- ---------------------------------------------------------------------------
+-- ============================================
+-- Quiz Attempts
+-- ============================================
 CREATE TABLE IF NOT EXISTS quiz_attempts (
     id          SERIAL PRIMARY KEY,
     session_id  UUID NOT NULL REFERENCES quiz_sessions(id) ON DELETE CASCADE,
@@ -95,6 +87,19 @@ CREATE TABLE IF NOT EXISTS quiz_attempts (
     user_id     INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     score       INT NOT NULL,
     total       INT NOT NULL,
-    results     JSONB NOT NULL,
+    results     JSONB NOT NULL DEFAULT '[]',
     created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ============================================
+-- Indexes
+-- ============================================
+CREATE INDEX IF NOT EXISTS idx_chunks_embedding
+    ON chunks USING hnsw (embedding vector_cosine_ops);
+
+CREATE INDEX IF NOT EXISTS idx_chunks_document_id  ON chunks(document_id);
+CREATE INDEX IF NOT EXISTS idx_documents_course_id ON documents(course_id);
+CREATE INDEX IF NOT EXISTS idx_documents_status    ON documents(status);
+CREATE INDEX IF NOT EXISTS idx_courses_owner_id    ON courses(owner_id);
+CREATE INDEX IF NOT EXISTS idx_qa_history_course   ON qa_history(course_id);
+CREATE INDEX IF NOT EXISTS idx_quiz_course         ON quiz_sessions(course_id);
