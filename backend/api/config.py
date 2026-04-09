@@ -14,12 +14,12 @@ class Settings(BaseSettings):
     s3_bucket_name: str = ""
     sqs_queue_url: str = ""
 
-    local_upload_dir: Path = Path("/app/data/uploads")
+    local_upload_dir: Path = Path("/tmp/coursemate_uploads")
     openai_api_key: str = ""
     openai_chat_model: str = "gpt-4o-mini"
 
     class Config:
-        env_file = ".env"
+        env_file = [".env", "../.env"]
         env_file_encoding = "utf-8"
         extra = "ignore"
 

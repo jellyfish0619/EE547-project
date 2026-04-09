@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import boto3
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -42,16 +42,15 @@ def _require_document(db: Session, doc_id: int, user: User) -> Document:
     return doc
 
 
-def _spawn_local_worker(local_pdf: Path, doc_id: int) -> None:
+def _spawn_local_worker(local_pdf: Path, doc_id: int, auto_summary: bool = True) -> None:
     settings = get_settings()
     backend_root = Path(__file__).resolve().parents[2]
     worker_main = backend_root / "worker" / "main.py"
     env = {**os.environ, "DATABASE_URL": settings.psycopg_dsn()}
-    subprocess.Popen(
-        [sys.executable, str(worker_main), "--local", str(local_pdf.resolve()), str(doc_id)],
-        cwd=str(backend_root),
-        env=env,
-    )
+    cmd = [sys.executable, str(worker_main), "--local", str(local_pdf.resolve()), str(doc_id)]
+    if not auto_summary:
+        cmd.append("--no-summary")
+    subprocess.Popen(cmd, cwd=str(backend_root), env=env)
 
 
 @router.post(
@@ -62,6 +61,7 @@ def _spawn_local_worker(local_pdf: Path, doc_id: int) -> None:
 async def upload_document(
     course_id: int,
     file: UploadFile = File(...),
+    auto_summary: bool = Form(True),
     db: Session = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -116,11 +116,11 @@ async def upload_document(
             sqs = boto3.client("sqs", region_name=settings.aws_region)
             sqs.send_message(
                 QueueUrl=settings.sqs_queue_url,
-                MessageBody=json.dumps({"document_id": doc.id, "s3_key": key}),
+                MessageBody=json.dumps({"document_id": doc.id, "s3_key": key, "auto_summary": auto_summary}),
             )
         else:
             local_path.write_bytes(data)
-            _spawn_local_worker(local_path, doc.id)
+            _spawn_local_worker(local_path, doc.id, auto_summary)
     elif settings.sqs_queue_url:
         local_path.write_bytes(data)
         doc.s3_key = f"local/{doc.id}.pdf"
@@ -129,14 +129,14 @@ async def upload_document(
         sqs.send_message(
             QueueUrl=settings.sqs_queue_url,
             MessageBody=json.dumps(
-                {"document_id": doc.id, "local_path": str(local_path.resolve())}
+                {"document_id": doc.id, "local_path": str(local_path.resolve()), "auto_summary": auto_summary}
             ),
         )
     else:
         local_path.write_bytes(data)
         doc.s3_key = str(local_path.resolve())
         db.commit()
-        _spawn_local_worker(local_path, doc.id)
+        _spawn_local_worker(local_path, doc.id, auto_summary)
 
     return DocumentCreatedOut(
         id=doc.id, filename=doc.filename, status=public_document_status(doc.status)

@@ -98,7 +98,7 @@ def search_and_answer(
     Returns:
         {"answer": str, "sources": [{"filename", "page_number", "content"}]}
     """
-    from embedder import embed_chunks
+    from worker.embedder import embed_chunks
 
     cid = int(course_id)
     did = int(document_id) if document_id else None

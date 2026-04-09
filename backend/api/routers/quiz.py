@@ -20,6 +20,8 @@ from api.schemas import (
     QuizSubmitRequest,
     QuizSubmitResponse,
     QuizResultItem,
+    QuizDetailResponse,
+    QuizDetailQuestion,
 )
 
 router = APIRouter(tags=["quiz"])
@@ -163,6 +165,7 @@ def submit(
                 question_id=ans.question_id,
                 correct=ok,
                 correct_answer=correct_letter,
+                user_answer=given,
             )
         )
 
@@ -183,6 +186,49 @@ def submit(
         score=score,
         total=total,
         results=results,
+    )
+
+
+@router.get("/quiz/{session_id}/result", response_model=QuizDetailResponse)
+def quiz_result(
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    session = db.get(QuizSession, session_id)
+    if session is None or session.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Quiz session not found")
+
+    attempt = db.scalar(
+        select(QuizAttempt)
+        .where(QuizAttempt.session_id == session_id, QuizAttempt.user_id == user.id)
+        .order_by(QuizAttempt.created_at.desc())
+    )
+    if attempt is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No submission found for this session")
+
+    # Build per-question detail by merging session questions with attempt results
+    by_id = {int(q["id"]): q for q in session.questions if isinstance(q, dict)}
+    result_by_id = {int(r["question_id"]): r for r in attempt.results if isinstance(r, dict)}
+
+    questions = []
+    for qid, q in sorted(by_id.items()):
+        r = result_by_id.get(qid, {})
+        questions.append(QuizDetailQuestion(
+            question_id=qid,
+            question=q.get("question", ""),
+            options=list(q.get("options", [])),
+            correct_answer=str(q.get("answer", "")),
+            user_answer=r.get("user_answer"),
+            correct=bool(r.get("correct", False)),
+        ))
+
+    return QuizDetailResponse(
+        session_id=session.id,
+        score=attempt.score,
+        total=attempt.total,
+        created_at=attempt.created_at,
+        questions=questions,
     )
 
 

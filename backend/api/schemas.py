@@ -148,6 +148,7 @@ class QuizResultItem(BaseModel):
     question_id: int
     correct: bool
     correct_answer: str
+    user_answer: str | None = None
 
 
 class QuizSubmitResponse(BaseModel):
@@ -164,3 +165,20 @@ class QuizHistoryItem(BaseModel):
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class QuizDetailQuestion(BaseModel):
+    question_id: int
+    question: str
+    options: list[str]
+    correct_answer: str
+    user_answer: str | None
+    correct: bool
+
+
+class QuizDetailResponse(BaseModel):
+    session_id: UUID
+    score: int
+    total: int
+    created_at: datetime
+    questions: list[QuizDetailQuestion]
