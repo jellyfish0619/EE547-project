@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CourseMate - Q&A</title>
+  <link rel="stylesheet" href="./css/style.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="nav">
+      <a href="./dashboard.html">Dashboard</a>
+      <a href="#" id="courseLink">Course Detail</a>
+      <a href="#" id="quizLink">Quiz</a>
+    </div>
+
+    <div class="card">
+      <h1>Q&A</h1>
+      <div id="courseInfo"></div>
+      <div id="message"></div>
+    </div>
+
+    <div class="card">
+      <h2>Ask Question</h2>
+      <input id="documentId" type="number" placeholder="Optional document_id" />
+      <textarea id="questionInput" placeholder="Type your question..."></textarea>
+      <button id="askBtn">Ask</button>
+      <div id="answerResult"></div>
+    </div>
+
+    <div class="card">
+      <h2>Q&A History</h2>
+      <div id="historyList">Loading...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, getCourseIdFromUrl, goToCourse, goToQuiz } from "./js/api.js";
+
+    const courseId = getCourseIdFromUrl();
+    const messageDiv = document.getElementById("message");
+    const courseInfoDiv = document.getElementById("courseInfo");
+    const answerResultDiv = document.getElementById("answerResult");
+    const historyListDiv = document.getElementById("historyList");
+
+    function showMessage(text, type = "info") {
+      messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+
+    function ensureLogin() {
+      if (!api.getToken()) {
+        window.location.href = "./index.html";
+      }
+    }
+
+    async function loadCourseTitle() {
+      try {
+        const course = await api.getCourseDetail(courseId);
+        courseInfoDiv.innerHTML = `<p class="small">Course: ${course.name} (ID: ${course.id})</p>`;
+      } catch (err) {
+        courseInfoDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    }
+
+    function renderHistory(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        historyListDiv.innerHTML = `<p>No Q&A history.</p>`;
+        return;
+      }
+
+      historyListDiv.innerHTML = items.map(item => `
+        <div class="list-item">
+          <p><strong>Q:</strong> ${item.question}</p>
+          <p><strong>A:</strong> ${item.answer}</p>
+          <p class="small">${item.created_at || ""}</p>
+        </div>
+      `).join("");
+    }
+
+    async function loadHistory() {
+      try {
+        const data = await api.getQAHistory(courseId);
+        renderHistory(data);
+      } catch (err) {
+        historyListDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    }
+
+    document.getElementById("askBtn").addEventListener("click", async () => {
+      const question = document.getElementById("questionInput").value.trim();
+      const documentId = document.getElementById("documentId").value.trim();
+
+      if (!question) {
+        showMessage("Question cannot be empty.", "error");
+        return;
+      }
+
+      answerResultDiv.innerHTML = `<div class="message info">Generating answer...</div>`;
+
+      try {
+        const result = await api.askQuestion(courseId, question, documentId || null);
+
+        const sourcesHtml = Array.isArray(result.sources) && result.sources.length > 0
+          ? result.sources.map(src => `
+              <div class="list-item">
+                <p><strong>${src.filename}</strong> - page ${src.page_number}</p>
+                <div class="pre-box">${src.content}</div>
+              </div>
+            `).join("")
+          : `<p>No sources returned.</p>`;
+
+        answerResultDiv.innerHTML = `
+          <div class="message success">Answer generated successfully.</div>
+          <div class="pre-box">${result.answer}</div>
+          <h3>Sources</h3>
+          ${sourcesHtml}
+        `;
+
+        document.getElementById("questionInput").value = "";
+        await loadHistory();
+      } catch (err) {
+        answerResultDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    });
+
+    document.getElementById("courseLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToCourse(courseId);
+    });
+
+    document.getElementById("quizLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToQuiz(courseId);
+    });
+
+    ensureLogin();
+    loadCourseTitle();
+    loadHistory();
+  </script>
+</body>
+</html>

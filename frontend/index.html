@@ -1,7 +1,86 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CourseMate - Login/Register</title>
+  <link rel="stylesheet" href="./css/style.css"/>
+</head>
 <body>
-  <h1>CourseMate</h1>
-  <p>Frontend coming soon</p>
+  <div class="container">
+    <div class="card">
+      <h1>CourseMate</h1>
+      <p class="small">Login / Register</p>
+      <div id="message"></div>
+
+      <div class="row">
+        <div class="col">
+          <h2>Register</h2>
+          <input id="registerEmail" type="email" placeholder="Email" />
+          <input id="registerPassword" type="password" placeholder="Password" />
+          <button id="registerBtn">Register</button>
+        </div>
+
+        <div class="col">
+          <h2>Login</h2>
+          <input id="loginEmail" type="email" placeholder="Email" />
+          <input id="loginPassword" type="password" placeholder="Password" />
+          <button id="loginBtn">Login</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api } from "./js/api.js";
+
+    const messageDiv = document.getElementById("message");
+
+    function showMessage(text, type = "info") {
+      messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+
+    document.getElementById("registerBtn").addEventListener("click", async () => {
+      const email = document.getElementById("registerEmail").value.trim();
+      const password = document.getElementById("registerPassword").value.trim();
+
+      if (!email || !password) {
+        showMessage("Please enter email and password.", "error");
+        return;
+      }
+
+      try {
+        const result = await api.register(email, password);
+        api.setToken(result.access_token);
+        showMessage("Register success. Redirecting...", "success");
+        setTimeout(() => {
+          window.location.href = "./dashboard.html";
+        }, 600);
+      } catch (err) {
+        showMessage(err.message, "error");
+      }
+    });
+
+    document.getElementById("loginBtn").addEventListener("click", async () => {
+      const email = document.getElementById("loginEmail").value.trim();
+      const password = document.getElementById("loginPassword").value.trim();
+
+      if (!email || !password) {
+        showMessage("Please enter email and password.", "error");
+        return;
+      }
+
+      try {
+        const result = await api.login(email, password);
+        api.setToken(result.access_token);
+        showMessage("Login success. Redirecting...", "success");
+        setTimeout(() => {
+          window.location.href = "./dashboard.html";
+        }, 600);
+      } catch (err) {
+        showMessage(err.message, "error");
+      }
+    });
+  </script>
 </body>
 </html>

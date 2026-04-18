@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CourseMate - Dashboard</title>
+  <link rel="stylesheet" href="./css/style.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="nav">
+      <a href="./dashboard.html">Dashboard</a>
+      <a href="./index.html" id="logoutLink">Logout</a>
+    </div>
+
+    <div class="card">
+      <h1>Course Dashboard</h1>
+      <div id="message"></div>
+    </div>
+
+    <div class="card">
+      <h2>Create Course</h2>
+      <input id="courseName" type="text" placeholder="Course name" />
+      <textarea id="courseDescription" placeholder="Course description"></textarea>
+      <button id="createCourseBtn">Create Course</button>
+    </div>
+
+    <div class="card">
+      <h2>Course List</h2>
+      <div id="courseList">Loading...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, goToCourse, goToQA, goToQuiz } from "./js/api.js";
+
+    const messageDiv = document.getElementById("message");
+    const courseListDiv = document.getElementById("courseList");
+
+    function showMessage(text, type = "info") {
+      messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+
+    function ensureLogin() {
+      if (!api.getToken()) {
+        window.location.href = "./index.html";
+      }
+    }
+
+    function renderCourses(courses) {
+      if (!Array.isArray(courses) || courses.length === 0) {
+        courseListDiv.innerHTML = `<p>No courses found.</p>`;
+        return;
+      }
+
+      courseListDiv.innerHTML = courses.map(course => `
+        <div class="list-item">
+          <h3>${course.name}</h3>
+          <p>${course.description || "No description."}</p>
+          <p class="small">ID: ${course.id} | Created at: ${course.created_at || "N/A"}</p>
+          <div class="inline-btns">
+            <button class="open-course" data-id="${course.id}">Course Detail</button>
+            <button class="open-qa" data-id="${course.id}">Q&A</button>
+            <button class="open-quiz" data-id="${course.id}">Quiz</button>
+            <button class="danger delete-course" data-id="${course.id}">Delete</button>
+          </div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".open-course").forEach(btn => {
+        btn.addEventListener("click", () => goToCourse(btn.dataset.id));
+      });
+
+      document.querySelectorAll(".open-qa").forEach(btn => {
+        btn.addEventListener("click", () => goToQA(btn.dataset.id));
+      });
+
+      document.querySelectorAll(".open-quiz").forEach(btn => {
+        btn.addEventListener("click", () => goToQuiz(btn.dataset.id));
+      });
+
+      document.querySelectorAll(".delete-course").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Delete this course?")) return;
+          try {
+            await api.deleteCourse(btn.dataset.id);
+            showMessage("Course deleted.", "success");
+            await loadCourses();
+          } catch (err) {
+            showMessage(err.message, "error");
+          }
+        });
+      });
+    }
+
+    async function loadCourses() {
+      try {
+        const data = await api.getCourses();
+        renderCourses(data);
+      } catch (err) {
+        courseListDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    }
+
+    document.getElementById("createCourseBtn").addEventListener("click", async () => {
+      const name = document.getElementById("courseName").value.trim();
+      const description = document.getElementById("courseDescription").value.trim();
+
+      if (!name) {
+        showMessage("Course name is required.", "error");
+        return;
+      }
+
+      try {
+        await api.createCourse(name, description);
+        showMessage("Course created successfully.", "success");
+        document.getElementById("courseName").value = "";
+        document.getElementById("courseDescription").value = "";
+        await loadCourses();
+      } catch (err) {
+        showMessage(err.message, "error");
+      }
+    });
+
+    document.getElementById("logoutLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      api.clearToken();
+      window.location.href = "./index.html";
+    });
+
+    ensureLogin();
+    loadCourses();
+  </script>
+</body>
+</html>

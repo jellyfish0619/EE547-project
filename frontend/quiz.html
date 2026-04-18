@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CourseMate - Quiz</title>
+  <link rel="stylesheet" href="./css/style.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="nav">
+      <a href="./dashboard.html">Dashboard</a>
+      <a href="#" id="courseLink">Course Detail</a>
+      <a href="#" id="qaLink">Q&A</a>
+    </div>
+
+    <div class="card">
+      <h1>Quiz</h1>
+      <div id="courseInfo"></div>
+      <div id="message"></div>
+    </div>
+
+    <div class="card">
+      <h2>Generate Quiz</h2>
+      <input id="numQuestions" type="number" min="1" max="30" value="5" placeholder="Number of questions" />
+      <input id="documentId" type="number" placeholder="Optional document_id" />
+      <button id="generateBtn">Generate Quiz</button>
+      <div id="quizContainer"></div>
+    </div>
+
+    <div class="card">
+      <h2>Quiz History</h2>
+      <div id="historyContainer">Loading...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, getCourseIdFromUrl, goToCourse, goToQA } from "./js/api.js";
+
+    const courseId = getCourseIdFromUrl();
+    const messageDiv = document.getElementById("message");
+    const courseInfoDiv = document.getElementById("courseInfo");
+    const quizContainer = document.getElementById("quizContainer");
+    const historyContainer = document.getElementById("historyContainer");
+
+    let currentSessionId = null;
+    let currentQuestions = [];
+
+    function showMessage(text, type = "info") {
+      messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+
+    function ensureLogin() {
+      if (!api.getToken()) {
+        window.location.href = "./index.html";
+      }
+    }
+
+    async function loadCourseTitle() {
+      try {
+        const course = await api.getCourseDetail(courseId);
+        courseInfoDiv.innerHTML = `<p class="small">Course: ${course.name} (ID: ${course.id})</p>`;
+      } catch (err) {
+        courseInfoDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    }
+
+    function renderQuiz(questions) {
+      quizContainer.innerHTML = `
+        <form id="quizForm">
+          ${questions.map((q, idx) => `
+            <div class="list-item">
+              <p><strong>Q${idx + 1}:</strong> ${q.question}</p>
+              ${q.options.map(option => {
+                const choice = option.trim().charAt(0);
+                return `
+                  <label class="option-row">
+                    <input type="radio" name="q_${q.id}" value="${choice}" />
+                    <span>${option}</span>
+                  </label>
+                `;
+              }).join("")}
+            </div>
+          `).join("")}
+          <button type="submit">Submit Answers</button>
+        </form>
+        <div id="submitResult"></div>
+      `;
+
+      document.getElementById("quizForm").addEventListener("submit", async (e) => {
+        e.preventDefault();
+
+        const answers = currentQuestions.map(q => {
+          const checked = document.querySelector(`input[name="q_${q.id}"]:checked`);
+          return {
+            question_id: q.id,
+            answer: checked ? checked.value : "",
+          };
+        });
+
+        try {
+          const result = await api.submitQuiz(currentSessionId, answers);
+          document.getElementById("submitResult").innerHTML = `
+            <div class="message success">Score: ${result.score} / ${result.total}</div>
+            <div class="pre-box">${JSON.stringify(result.results, null, 2)}</div>
+          `;
+          await loadHistory();
+        } catch (err) {
+          document.getElementById("submitResult").innerHTML = `<div class="message error">${err.message}</div>`;
+        }
+      });
+    }
+
+    function renderHistory(items) {
+      if (!Array.isArray(items) || items.length === 0) {
+        historyContainer.innerHTML = `<p>No quiz history.</p>`;
+        return;
+      }
+
+      historyContainer.innerHTML = items.map(item => `
+        <div class="list-item">
+          <p><strong>Session:</strong> ${item.session_id}</p>
+          <p><strong>Score:</strong> ${item.score} / ${item.total}</p>
+          <p class="small">${item.created_at || ""}</p>
+          <button class="view-result" data-id="${item.session_id}">View Result</button>
+          <div id="result-${item.session_id}" class="pre-box" style="display:none;"></div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".view-result").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          try {
+            const result = await api.getQuizResult(btn.dataset.id);
+            const box = document.getElementById(`result-${btn.dataset.id}`);
+            box.style.display = "block";
+            box.textContent = JSON.stringify(result, null, 2);
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+      });
+    }
+
+    async function loadHistory() {
+      try {
+        const data = await api.getQuizHistory(courseId);
+        renderHistory(data);
+      } catch (err) {
+        historyContainer.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    }
+
+    document.getElementById("generateBtn").addEventListener("click", async () => {
+      const numQuestions = document.getElementById("numQuestions").value;
+      const documentId = document.getElementById("documentId").value.trim();
+
+      try {
+        const result = await api.generateQuiz(courseId, numQuestions, documentId || null);
+        currentSessionId = result.session_id;
+        currentQuestions = result.questions || [];
+        renderQuiz(currentQuestions);
+      } catch (err) {
+        quizContainer.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    });
+
+    document.getElementById("courseLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToCourse(courseId);
+    });
+
+    document.getElementById("qaLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToQA(courseId);
+    });
+
+    ensureLogin();
+    loadCourseTitle();
+    loadHistory();
+  </script>
+</body>
+</html>

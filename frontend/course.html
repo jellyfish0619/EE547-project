@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>CourseMate - Course Detail</title>
+  <link rel="stylesheet" href="./css/style.css"/>
+</head>
+<body>
+  <div class="container">
+    <div class="nav">
+      <a href="./dashboard.html">Dashboard</a>
+      <a href="#" id="qaLink">Q&A</a>
+      <a href="#" id="quizLink">Quiz</a>
+    </div>
+
+    <div class="card">
+      <h1>Course Detail</h1>
+      <div id="message"></div>
+      <div id="courseInfo">Loading...</div>
+    </div>
+
+    <div class="card">
+      <h2>Upload PDF</h2>
+      <input id="pdfFile" type="file" accept=".pdf" />
+      <select id="autoSummary">
+        <option value="true">Auto Summary: true</option>
+        <option value="false">Auto Summary: false</option>
+      </select>
+      <button id="uploadBtn">Upload</button>
+      <div id="uploadMessage"></div>
+    </div>
+
+    <div class="card">
+      <h2>Documents</h2>
+      <div id="documentList">Loading...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { api, getCourseIdFromUrl, goToQA, goToQuiz } from "./js/api.js";
+
+    const messageDiv = document.getElementById("message");
+    const courseInfoDiv = document.getElementById("courseInfo");
+    const documentListDiv = document.getElementById("documentList");
+    const uploadMessageDiv = document.getElementById("uploadMessage");
+
+    const courseId = getCourseIdFromUrl();
+
+    function showMessage(text, type = "info") {
+      messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+
+    function showUploadMessage(text, type = "info") {
+      uploadMessageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    }
+
+    function ensureLogin() {
+      if (!api.getToken()) {
+        window.location.href = "./index.html";
+      }
+    }
+
+    function statusBadge(status) {
+      return `<span class="small">Status: ${status}</span>`;
+    }
+
+    async function pollStatus(docId) {
+      const intervalId = setInterval(async () => {
+        try {
+          const doc = await api.getDocumentStatus(docId);
+          if (doc.status === "ready" || doc.status === "failed") {
+            clearInterval(intervalId);
+            await loadCourse();
+          }
+        } catch (e) {
+          clearInterval(intervalId);
+        }
+      }, 3000);
+    }
+
+    function renderDocuments(documents) {
+      if (!Array.isArray(documents) || documents.length === 0) {
+        documentListDiv.innerHTML = `<p>No documents uploaded yet.</p>`;
+        return;
+      }
+
+      documentListDiv.innerHTML = documents.map(doc => `
+        <div class="list-item">
+          <h3>${doc.filename}</h3>
+          <p>${statusBadge(doc.status)}</p>
+          <p class="small">Document ID: ${doc.id}</p>
+          <div class="inline-btns">
+            <button class="check-status" data-id="${doc.id}">Refresh Status</button>
+            <button class="view-summary" data-id="${doc.id}" ${doc.status !== "ready" ? "disabled" : ""}>View Summary</button>
+            <button class="danger delete-doc" data-id="${doc.id}">Delete</button>
+          </div>
+          <div id="summary-${doc.id}" class="pre-box" style="display:none;"></div>
+        </div>
+      `).join("");
+
+      document.querySelectorAll(".check-status").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          try {
+            const result = await api.getDocumentStatus(btn.dataset.id);
+            alert(`Document ${result.filename}: ${result.status}`);
+            await loadCourse();
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+      });
+
+      document.querySelectorAll(".view-summary").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          try {
+            const result = await api.getDocumentSummary(btn.dataset.id);
+            const box = document.getElementById(`summary-${btn.dataset.id}`);
+            box.style.display = "block";
+            box.textContent = result.summary || "No summary available.";
+          } catch (err) {
+            alert(err.message);
+          }
+        });
+      });
+
+      document.querySelectorAll(".delete-doc").forEach(btn => {
+        btn.addEventListener("click", async () => {
+          if (!confirm("Delete this document?")) return;
+          try {
+            await api.deleteDocument(btn.dataset.id);
+            showMessage("Document deleted.", "success");
+            await loadCourse();
+          } catch (err) {
+            showMessage(err.message, "error");
+          }
+        });
+      });
+    }
+
+    async function loadCourse() {
+      if (!courseId) {
+        courseInfoDiv.innerHTML = `<div class="message error">Missing course_id in URL.</div>`;
+        return;
+      }
+
+      try {
+        const course = await api.getCourseDetail(courseId);
+        courseInfoDiv.innerHTML = `
+          <h2>${course.name}</h2>
+          <p class="small">Course ID: ${course.id}</p>
+        `;
+        renderDocuments(course.documents || []);
+      } catch (err) {
+        courseInfoDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+      }
+    }
+
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      const file = document.getElementById("pdfFile").files[0];
+      const autoSummary = document.getElementById("autoSummary").value === "true";
+
+      if (!courseId) {
+        showUploadMessage("Missing course_id.", "error");
+        return;
+      }
+
+      if (!file) {
+        showUploadMessage("Please choose a PDF file.", "error");
+        return;
+      }
+
+      try {
+        const result = await api.uploadDocument(courseId, file, autoSummary);
+        showUploadMessage(`Upload success. Document ID: ${result.id}, status: ${result.status}`, "success");
+        await loadCourse();
+        if (result.status === "pending" || result.status === "processing") {
+          pollStatus(result.id);
+        }
+      } catch (err) {
+        showUploadMessage(err.message, "error");
+      }
+    });
+
+    document.getElementById("qaLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToQA(courseId);
+    });
+
+    document.getElementById("quizLink").addEventListener("click", (e) => {
+      e.preventDefault();
+      goToQuiz(courseId);
+    });
+
+    ensureLogin();
+    loadCourse();
+  </script>
+</body>
+</html>
