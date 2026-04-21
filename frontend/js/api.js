@@ -144,14 +144,18 @@ export const api = {
       method: "GET",
     }),
 
-  generateQuiz: (courseId, numQuestions = 5, documentId = null) =>
+  generateQuiz: (courseId, numQuestions = 5, documentId = null, difficulty = "medium") =>
     apiFetch(`/courses/${courseId}/quiz/generate`, {
       method: "POST",
       body: JSON.stringify({
         num_questions: Number(numQuestions),
         document_id: documentId ? Number(documentId) : null,
+        difficulty,
       }),
     }),
+
+  deleteQuizAttempt: (courseId, sessionId) =>
+    apiFetch(`/courses/${courseId}/quiz/${sessionId}`, { method: "DELETE" }),
 
   submitQuiz: (sessionId, answers) =>
     apiFetch(`/quiz/${sessionId}/submit`, {
@@ -168,4 +172,19 @@ export const api = {
     apiFetch(`/courses/${courseId}/quiz/history`, {
       method: "GET",
     }),
+
+  deleteQA: (courseId, qaId) =>
+    apiFetch(`/courses/${courseId}/qa/${qaId}`, { method: "DELETE" }),
+
+  clearQAHistory: (courseId) =>
+    apiFetch(`/courses/${courseId}/qa`, { method: "DELETE" }),
+
+  getKnowledgeMap: (docId, regenerate = false) =>
+    apiFetch(`/documents/${docId}/knowledge-map${regenerate ? "?regenerate=true" : ""}`, { method: "GET" }),
+
+  explainPage: (docId, page) =>
+    apiFetch(`/documents/${docId}/pages/${page}/explain`, { method: "GET" }),
+
+  getConcepts: (docId, regenerate = false) =>
+    apiFetch(`/documents/${docId}/concepts${regenerate ? "?regenerate=true" : ""}`, { method: "GET" }),
 };

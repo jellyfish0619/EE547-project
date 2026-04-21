@@ -51,6 +51,8 @@ class Document(Base):
     s3_key: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(Text, nullable=False, server_default="pending")
     summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    knowledge_map: Mapped[str | None] = mapped_column(Text, nullable=True)
+    concepts: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now()
     )

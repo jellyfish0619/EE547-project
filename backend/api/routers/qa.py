@@ -56,14 +56,7 @@ def ask(
         )
 
     if body.document_id is not None:
-        try:
-            did = int(body.document_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid document_id",
-            )
-        doc = db.get(Document, did)
+        doc = db.get(Document, body.document_id)
         if doc is None or doc.course_id != course_id or doc.status != "ready":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -110,3 +103,34 @@ def qa_history(
         .order_by(QAHistory.created_at.desc())
     ).all()
     return rows
+
+
+@router.delete("/courses/{course_id}/qa/{qa_id}")
+def delete_qa(
+    course_id: int,
+    qa_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _course_for_user(db, course_id, user)
+    row = db.get(QAHistory, qa_id)
+    if row is None or row.course_id != course_id or row.user_id != user.id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Record not found")
+    db.delete(row)
+    db.commit()
+    return {"message": "Deleted"}
+
+
+@router.delete("/courses/{course_id}/qa")
+def clear_qa_history(
+    course_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _course_for_user(db, course_id, user)
+    db.query(QAHistory).filter(
+        QAHistory.course_id == course_id,
+        QAHistory.user_id == user.id,
+    ).delete()
+    db.commit()
+    return {"message": "Cleared"}

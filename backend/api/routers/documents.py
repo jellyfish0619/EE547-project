@@ -198,6 +198,77 @@ def document_summary(
     return DocumentSummaryOut(id=d.id, filename=d.filename, summary=d.summary)
 
 
+@router.get("/documents/{doc_id}/knowledge-map")
+def document_knowledge_map(
+    doc_id: int,
+    regenerate: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    d = _require_document(db, doc_id, user)
+    if d.status != "ready":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document is not ready yet")
+
+    # Return cached version unless regenerate=true
+    if d.knowledge_map and not regenerate:
+        return {"id": doc_id, "filename": d.filename, "knowledge_map": d.knowledge_map, "cached": True}
+
+    from api.config import get_settings
+    from worker.llm import generate_knowledge_map
+    settings = get_settings()
+    result = generate_knowledge_map(doc_id, settings.psycopg_dsn())
+
+    # Save to DB
+    d.knowledge_map = result
+    db.commit()
+
+    return {"id": doc_id, "filename": d.filename, "knowledge_map": result, "cached": False}
+
+
+@router.get("/documents/{doc_id}/pages/{page}/explain")
+def explain_page(
+    doc_id: int,
+    page: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    d = _require_document(db, doc_id, user)
+    if d.status != "ready":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document is not ready yet")
+    from api.config import get_settings
+    from worker.llm import explain_page as llm_explain_page
+    settings = get_settings()
+    result = llm_explain_page(doc_id, page, settings.psycopg_dsn())
+    return result
+
+
+@router.get("/documents/{doc_id}/concepts")
+def document_concepts(
+    doc_id: int,
+    regenerate: bool = False,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    d = _require_document(db, doc_id, user)
+    if d.status != "ready":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Document is not ready yet")
+
+    # Return cached version unless regenerate=true
+    if d.concepts and not regenerate:
+        return {"id": doc_id, "filename": d.filename, "concepts": d.concepts, "cached": True}
+
+    from api.config import get_settings
+    from worker.llm import extract_concepts
+    settings = get_settings()
+    concepts = extract_concepts(doc_id, settings.psycopg_dsn())
+
+    # Save to DB
+    d.concepts = concepts
+    db.commit()
+
+    return {"id": doc_id, "filename": d.filename, "concepts": concepts, "cached": False}
+
+
 @router.delete("/documents/{doc_id}", response_model=MessageOut)
 def delete_document(
     doc_id: int,

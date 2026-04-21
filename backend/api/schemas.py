@@ -99,7 +99,7 @@ class SourceChunk(BaseModel):
 
 class QAAskRequest(BaseModel):
     question: str
-    document_id: str | None = None
+    document_id: int | None = None
 
 
 class QAAskResponse(BaseModel):
@@ -120,14 +120,17 @@ class QAHistoryItem(BaseModel):
 # --- Quiz ---
 class QuizGenerateRequest(BaseModel):
     num_questions: int = Field(default=5, ge=1, le=30)
-    document_id: str | None = None
+    document_id: int | None = None
+    difficulty: str = Field(default="medium", pattern="^(easy|medium|hard)$")
 
 
 class QuizQuestionOut(BaseModel):
     id: int
+    type: str = "mcq"           # "mcq" | "short_answer" | "calculation"
     question: str
-    options: list[str]
-    answer: str
+    options: list[str]          # empty for non-MCQ
+    answer: str                 # reference answer (shown after submit)
+    explanation: str = ""       # always shown after submit
 
 
 class QuizGenerateResponse(BaseModel):
@@ -146,9 +149,12 @@ class QuizSubmitRequest(BaseModel):
 
 class QuizResultItem(BaseModel):
     question_id: int
+    type: str = "mcq"
     correct: bool
     correct_answer: str
+    explanation: str = ""
     user_answer: str | None = None
+    feedback: str | None = None  # LLM feedback for open questions
 
 
 class QuizSubmitResponse(BaseModel):
@@ -169,10 +175,13 @@ class QuizHistoryItem(BaseModel):
 
 class QuizDetailQuestion(BaseModel):
     question_id: int
+    type: str = "mcq"
     question: str
     options: list[str]
     correct_answer: str
+    explanation: str = ""
     user_answer: str | None
+    feedback: str | None = None
     correct: bool
 
 
