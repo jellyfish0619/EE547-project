@@ -3,197 +3,1232 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-  <title>CourseMate - Course Detail</title>
+  <title>CourseMate - Course</title>
   <link rel="stylesheet" href="./css/style.css"/>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [['\\(','\\)'], ['$','$']], displayMath: [['\\[','\\]'], ['$$','$$']] },
+      options: { skipHtmlTags: ['script','noscript','style','textarea'] }
+    };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-chtml.js" async></script>
+  <!-- marked.js for Markdown rendering -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@9/marked.min.js"></script>
+  <style>
+    .course-hero {
+      background: linear-gradient(135deg, #1a73e8 0%, #1557b0 100%);
+      color: #fff;
+      border-radius: 16px;
+      padding: 32px 36px;
+      margin-bottom: 24px;
+    }
+    .course-hero h1 { font-size: 24px; font-weight: 700; margin: 0 0 6px 0; color: #fff; }
+    .course-hero p  { font-size: 14px; margin: 0; opacity: 0.85; }
+
+    .section-card {
+      background: #fff;
+      border-radius: 16px;
+      padding: 28px;
+      box-shadow: 0 1px 6px rgba(0,0,0,0.08);
+      margin-bottom: 20px;
+    }
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 20px;
+    }
+    .section-title { font-size: 17px; font-weight: 600; color: #202124; margin: 0; }
+
+    .file-upload-area {
+      border: 2px dashed #dadce0;
+      border-radius: 10px;
+      padding: 20px;
+      text-align: center;
+      color: #5f6368;
+      font-size: 14px;
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      margin-bottom: 16px;
+    }
+    .file-upload-area:hover { border-color: #1a73e8; background: #f8f9ff; }
+    .file-upload-area.has-file { border-color: #34a853; background: #e6f4ea; color: #137333; }
+    .file-upload-area input[type="file"] { display: none; }
+
+    .doc-item {
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 16px 20px;
+      margin-bottom: 10px;
+      transition: box-shadow 0.15s;
+    }
+    .doc-item:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .doc-item-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+    .doc-item-info { flex: 1; }
+    .doc-item-info h4 { font-size: 14px; font-weight: 600; color: #202124; margin: 0 0 4px 0; }
+    .doc-item-info .doc-meta { font-size: 12px; color: #9aa0a6; }
+    .doc-item-btns { display: flex; gap: 6px; flex-wrap: wrap; flex-shrink: 0; }
+    .doc-item-btns button { font-size: 12px; padding: 6px 12px; }
+
+    /* Markdown rendered content */
+    .md-content { font-size: 14px; line-height: 1.75; color: #202124; }
+    .md-content h2 { font-size: 16px; font-weight: 700; margin: 20px 0 8px; color: #1a73e8; }
+    .md-content h3 { font-size: 14px; font-weight: 600; margin: 14px 0 6px; color: #202124; }
+    .md-content ul, .md-content ol { padding-left: 20px; margin: 6px 0; }
+    .md-content li { margin-bottom: 4px; }
+    .md-content table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 13px; }
+    .md-content th, .md-content td { border: 1px solid #e0e0e0; padding: 8px 12px; text-align: left; }
+    .md-content th { background: #f1f3f4; font-weight: 600; }
+    .md-content strong { color: #202124; }
+    .md-content code { background: #f1f3f4; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+    .md-content blockquote { border-left: 3px solid #1a73e8; padding-left: 12px; color: #5f6368; margin: 8px 0; }
+
+    .summary-box {
+      background: #f8f9ff;
+      border-left: 4px solid #1a73e8;
+      border-radius: 0 8px 8px 0;
+      padding: 16px 20px;
+      margin-top: 12px;
+    }
+
+    /* Q&A */
+    .qa-ask-row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .qa-ask-row select { width: auto; flex: 1; min-width: 160px; }
+    .answer-box {
+      background: #f8f9fa;
+      border: 1px solid #e0e0e0;
+      border-radius: 10px;
+      padding: 18px 20px;
+      margin-top: 16px;
+    }
+    .answer-box .sources {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #e0e0e0;
+      font-size: 12px;
+      color: #5f6368;
+    }
+    .qa-history-item { border: 1px solid #e0e0e0; border-radius: 10px; padding: 14px 16px; margin-bottom: 10px; }
+    .qa-history-item .question { font-size: 14px; font-weight: 600; color: #1a73e8; margin: 0 0 8px 0; }
+
+    /* Quiz */
+    .quiz-q-card {
+      background: #fff; border: 1px solid #e0e0e0; border-radius: 14px;
+      padding: 24px; margin-bottom: 16px;
+      box-shadow: 0 1px 4px rgba(0,0,0,0.05);
+    }
+    .quiz-q-card .q-label {
+      display: inline-block; font-size: 11px; font-weight: 600;
+      padding: 2px 10px; border-radius: 10px; margin-bottom: 12px; text-transform: uppercase;
+    }
+    .q-label.mcq      { background:#e8f0fe; color:#1a73e8; }
+    .q-label.short_answer { background:#fce8e6; color:#c5221f; }
+    .q-label.calculation  { background:#e6f4ea; color:#137333; }
+    .quiz-q-card .q-text { font-size:15px; font-weight:600; color:#202124; margin:0 0 16px; line-height:1.65; }
+    .option-row {
+      display: flex; gap: 10px; align-items: center;
+      padding: 10px 14px; border: 1.5px solid #dadce0; border-radius: 8px;
+      margin-bottom: 8px; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s; font-size: 14px;
+    }
+    .option-row:hover { border-color: #1a73e8; background: #f8f9ff; }
+    .option-row input[type="radio"] { width: auto; margin: 0; accent-color: #1a73e8; }
+    .option-row.correct-opt { border-color: #34a853 !important; background: #e6f4ea !important; }
+    .option-row.wrong-opt   { border-color: #ea4335 !important; background: #fce8e6 !important; }
+    .open-answer-area {
+      width: 100%; min-height: 100px; resize: vertical;
+      font-size: 14px; font-family: inherit;
+    }
+    .quiz-result-card {
+      background: #fff; border-radius: 12px; padding: 20px;
+      margin-bottom: 14px; border-left: 4px solid #e0e0e0;
+    }
+    .quiz-result-card.correct-card { border-left-color: #34a853; }
+    .quiz-result-card.wrong-card   { border-left-color: #ea4335; }
+    .result-section { margin-top: 12px; padding-top: 12px; border-top: 1px solid #f1f3f4; font-size: 13px; }
+    .result-section .label { font-weight: 600; color: #5f6368; margin-bottom: 4px; }
+    .result-section .val { color: #202124; line-height: 1.6; }
+    .quiz-history-item {
+      border: 1px solid #e0e0e0; border-radius: 10px; padding: 14px 16px;
+      margin-bottom: 10px; display: flex; justify-content: space-between;
+      align-items: center; flex-wrap: wrap; gap: 8px;
+    }
+    /* Math toolbar */
+    .math-toolbar {
+      display: flex; flex-wrap: wrap; gap: 4px;
+      margin-bottom: 6px;
+    }
+    .math-toolbar button {
+      padding: 4px 9px; font-size: 13px; font-family: 'Georgia', serif;
+      background: #f1f3f4; border: 1px solid #dadce0; border-radius: 6px;
+      cursor: pointer; color: #202124; line-height: 1.4;
+      transition: background 0.15s;
+    }
+    .math-toolbar button:hover { background: #e8f0fe; border-color: #1a73e8; color: #1a73e8; }
+    .math-preview {
+      min-height: 36px; background: #f8f9ff;
+      border: 1px dashed #c5cae9; border-radius: 8px;
+      padding: 8px 12px; font-size: 14px; color: #3c4043;
+      margin-top: 6px;
+    }
+
+    /* Concept cards */
+    .concept-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 14px;
+      margin-top: 4px;
+    }
+    .concept-card {
+      border: 1px solid #e0e0e0;
+      border-radius: 12px;
+      padding: 16px;
+      cursor: pointer;
+      transition: box-shadow 0.15s, border-color 0.15s;
+      position: relative;
+    }
+    .concept-card:hover { box-shadow: 0 3px 12px rgba(0,0,0,0.10); border-color: #1a73e8; }
+    .concept-card .term {
+      font-size: 14px; font-weight: 700; color: #1a73e8;
+      margin: 0 0 8px 0;
+    }
+    .concept-card .definition { font-size: 13px; color: #3c4043; line-height: 1.55; margin: 0 0 8px 0; }
+    .concept-card .formula { font-size: 13px; color: #5f6368; margin: 0 0 6px 0; }
+    .concept-card .related-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+    .concept-card .tag {
+      font-size: 11px; background: #e8f0fe; color: #1a73e8;
+      padding: 2px 8px; border-radius: 10px;
+    }
+
+    /* Modals */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.4); z-index: 200;
+      align-items: flex-start; justify-content: center;
+      overflow-y: auto; padding: 40px 16px;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: #fff; border-radius: 16px; padding: 32px;
+      width: 100%; max-width: 720px;
+      box-shadow: 0 8px 32px rgba(0,0,0,0.18); position: relative;
+    }
+    .modal-sm { max-width: 480px; }
+    .modal h2 { font-size: 18px; font-weight: 600; color: #202124; margin: 0 0 20px 0; }
+    .modal-close {
+      position: absolute; top: 16px; right: 16px;
+      background: transparent; color: #5f6368;
+      font-size: 20px; padding: 4px 10px; border-radius: 6px;
+    }
+    .modal-close:hover { background: #f1f3f4; color: #202124; }
+
+    /* Study modal */
+    .page-nav {
+      display: flex; align-items: center; gap: 12px;
+      margin-bottom: 20px; flex-wrap: wrap;
+    }
+    .page-nav span { font-size: 14px; color: #5f6368; }
+    .page-nav input[type="number"] { width: 70px; }
+    .study-raw {
+      background: #f8f9fa; border: 1px solid #e0e0e0;
+      border-radius: 8px; padding: 14px 16px;
+      font-size: 13px; color: #5f6368;
+      white-space: pre-wrap; max-height: 160px;
+      overflow-y: auto; margin-bottom: 16px;
+    }
+    .study-explanation { font-size: 14px; line-height: 1.75; }
+
+    /* Review modal */
+    .review-q { border: 1px solid #e0e0e0; border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+    .review-q .q-text { font-size: 14px; font-weight: 600; margin: 0 0 10px 0; }
+    .review-answer { font-size: 13px; margin: 3px 0; }
+    .review-answer.correct-ans { color: #137333; }
+    .review-answer.wrong-ans   { color: #c5221f; }
+    .review-answer.right-label { color: #1a73e8; }
+
+    .subsection-divider { border: none; border-top: 1px solid #e0e0e0; margin: 24px 0; }
+
+    /* Loading spinner text */
+    .loading-text { color: #5f6368; font-size: 14px; text-align: center; padding: 24px 0; }
+  </style>
 </head>
 <body>
-  <div class="container">
-    <div class="nav">
+
+  <div class="topbar">
+    <a class="topbar-brand" href="./dashboard.html">CourseMate</a>
+    <nav class="topbar-nav">
       <a href="./dashboard.html">Dashboard</a>
-      <a href="#" id="qaLink">Q&A</a>
-      <a href="#" id="quizLink">Quiz</a>
+      <a href="#" id="logoutLink" class="btn-logout">Logout</a>
+    </nav>
+  </div>
+
+  <div class="container">
+    <div id="globalMessage"></div>
+
+    <!-- Course Hero -->
+    <div class="course-hero">
+      <h1 id="courseName">Loading...</h1>
+      <p id="courseDesc"></p>
     </div>
 
-    <div class="card">
-      <h1>Course Detail</h1>
-      <div id="message"></div>
-      <div id="courseInfo">Loading...</div>
-    </div>
+    <!-- ── Documents ── -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Documents</h2>
+      </div>
 
-    <div class="card">
-      <h2>Upload PDF</h2>
-      <input id="pdfFile" type="file" accept=".pdf" />
-      <select id="autoSummary">
-        <option value="true">Auto Summary: true</option>
-        <option value="false">Auto Summary: false</option>
-      </select>
-      <button id="uploadBtn">Upload</button>
+      <div class="file-upload-area" id="fileUploadArea">
+        <input type="file" id="pdfFile" accept=".pdf" />
+        <div id="fileLabel">📄 Click to select a PDF file</div>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:16px;">
+        <label style="font-size:13px; color:#5f6368; white-space:nowrap;">
+          <input type="checkbox" id="autoSummaryCheck" checked style="width:auto; margin-right:6px;" />
+          Auto-generate summary
+        </label>
+        <button id="uploadBtn" style="flex-shrink:0;">Upload PDF</button>
+      </div>
       <div id="uploadMessage"></div>
+
+      <hr class="subsection-divider" />
+      <div class="section-label">Uploaded Documents</div>
+      <div id="documentList"><div class="empty-state">No documents yet.</div></div>
     </div>
 
-    <div class="card">
-      <h2>Documents</h2>
-      <div id="documentList">Loading...</div>
+    <!-- ── Summary (per-section, shown on demand) ── -->
+    <div class="section-card" id="summarySection" style="display:none;">
+      <div class="section-header">
+        <h2 class="section-title" id="summaryTitle">Summary</h2>
+        <button class="ghost" id="closeSummaryBtn" style="font-size:13px; padding:6px 12px;">Close</button>
+      </div>
+      <div class="summary-box md-content" id="summaryContent"></div>
+    </div>
+
+    <!-- ── Knowledge Map (shown on demand) ── -->
+    <div class="section-card" id="knowledgeMapSection" style="display:none;">
+      <div class="section-header">
+        <h2 class="section-title" id="kmTitle">Knowledge Map</h2>
+        <button class="ghost" id="closeKmBtn" style="font-size:13px; padding:6px 12px;">Close</button>
+      </div>
+      <div class="md-content" id="knowledgeMapContent"></div>
+    </div>
+
+    <!-- ── Q&A ── -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Q&amp;A</h2>
+      </div>
+      <div style="margin-bottom:20px;">
+        <textarea id="qaQuestion" placeholder="Ask a question about this course..." style="margin-bottom:10px;"></textarea>
+        <div class="qa-ask-row">
+          <select id="qaDocFilter"><option value="">All documents</option></select>
+          <button id="askBtn">Ask</button>
+        </div>
+      </div>
+      <div id="qaAnswer" style="display:none;" class="answer-box">
+        <div class="md-content" id="qaAnswerText"></div>
+        <div class="sources" id="qaSourcesText"></div>
+      </div>
+      <hr class="subsection-divider" />
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div class="section-label" style="margin:0;">History</div>
+        <button class="ghost" id="clearQABtn" style="font-size:12px; padding:4px 12px; color:#ea4335;">Clear All</button>
+      </div>
+      <div id="qaHistory"><div class="empty-state">No questions yet.</div></div>
+    </div>
+
+    <!-- ── Quiz ── -->
+    <div class="section-card">
+      <div class="section-header">
+        <h2 class="section-title">Quiz</h2>
+      </div>
+      <div style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+        <label style="font-size:13px; color:#5f6368; white-space:nowrap;">Questions:</label>
+        <input type="number" id="numQuestions" value="5" min="1" max="20" style="width:70px;" />
+        <select id="quizDifficulty" style="width:auto;">
+          <option value="easy">🟢 Easy</option>
+          <option value="medium" selected>🟡 Medium</option>
+          <option value="hard">🔴 Hard</option>
+        </select>
+        <select id="quizDocFilter" style="flex:1; min-width:160px;"><option value="">All documents</option></select>
+        <button id="generateQuizBtn">🎯 Start Quiz</button>
+      </div>
+      <p style="font-size:12px; color:#9aa0a6; margin:0 0 4px;">Mixed: multiple choice · short answer · calculation</p>
+      <hr class="subsection-divider" />
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;">
+        <div class="section-label" style="margin:0;">History</div>
+      </div>
+      <div id="quizHistory"><div class="empty-state">No quizzes yet.</div></div>
     </div>
   </div>
 
-  <script type="module">
-    import { api, getCourseIdFromUrl, goToQA, goToQuiz } from "./js/api.js";
+  <!-- ── Full-screen Quiz Modal ── -->
+  <div id="quizModal" style="display:none; position:fixed; inset:0; background:#f0f4f8; z-index:300; overflow-y:auto;">
+    <div style="max-width:780px; margin:0 auto; padding:24px 16px 60px;">
+      <!-- Header -->
+      <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:24px;">
+        <div>
+          <div style="font-size:20px; font-weight:700; color:#202124;" id="quizModalTitle">Quiz</div>
+          <div style="font-size:13px; color:#5f6368; margin-top:4px;" id="quizModalMeta"></div>
+        </div>
+        <button class="ghost" id="closeQuizModalBtn" style="font-size:14px; padding:8px 16px; color:#5f6368;">✕ Close</button>
+      </div>
 
-    const messageDiv = document.getElementById("message");
-    const courseInfoDiv = document.getElementById("courseInfo");
-    const documentListDiv = document.getElementById("documentList");
-    const uploadMessageDiv = document.getElementById("uploadMessage");
+      <!-- Loading state -->
+      <div id="quizLoadingState" style="text-align:center; padding:60px 0; color:#5f6368; font-size:15px;">
+        Generating quiz… this may take 20–30 seconds
+        <div style="margin-top:16px; font-size:12px; color:#9aa0a6;">MCQ · Short Answer · Calculation</div>
+      </div>
+
+      <!-- Questions -->
+      <div id="quizQuestionsWrap" style="display:none;">
+        <div id="quizQuestionsContainer"></div>
+        <div style="display:flex; justify-content:flex-end; margin-top:24px;">
+          <button id="submitQuizBtn" style="padding:12px 32px; font-size:15px;">Submit Quiz</button>
+        </div>
+      </div>
+
+      <!-- Results -->
+      <div id="quizResultsWrap" style="display:none;">
+        <div id="quizScoreBox" style="
+          background:#fff; border-radius:16px; padding:24px 28px; margin-bottom:20px;
+          box-shadow:0 1px 6px rgba(0,0,0,0.08); text-align:center;">
+        </div>
+        <div id="quizResultDetail"></div>
+        <div style="text-align:center; margin-top:24px;">
+          <button class="secondary" id="retakeQuizBtn" style="padding:10px 28px;">↻ New Quiz</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Study Modal -->
+  <div class="modal-overlay" id="studyModal">
+    <div class="modal">
+      <button class="modal-close" id="closeStudyBtn">✕</button>
+      <h2 id="studyModalTitle">Study Mode</h2>
+      <div class="page-nav">
+        <button class="ghost" id="prevPageBtn" style="padding:6px 14px;">← Prev</button>
+        <input type="number" id="pageInput" min="1" value="1" />
+        <span id="pageTotal">/ ?</span>
+        <button class="ghost" id="nextPageBtn" style="padding:6px 14px;">Next →</button>
+        <button class="secondary" id="goPageBtn" style="padding:6px 14px; margin-left:auto;">Go</button>
+      </div>
+      <div id="studyLoading" class="loading-text">Loading...</div>
+      <div id="studyContent" style="display:none;">
+        <div class="section-label" style="margin-bottom:6px;">Raw Text</div>
+        <div class="study-raw" id="studyRaw"></div>
+        <div class="section-label" style="margin-bottom:8px;">AI Explanation</div>
+        <div class="study-explanation md-content" id="studyExplanation"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Concepts Modal -->
+  <div class="modal-overlay" id="conceptsModal">
+    <div class="modal">
+      <button class="modal-close" id="closeConceptsBtn">✕</button>
+      <h2 id="conceptsModalTitle">Concept Cards</h2>
+      <div id="conceptsLoading" class="loading-text">Extracting concepts...</div>
+      <div id="conceptsContent" style="display:none;">
+        <div class="concept-grid" id="conceptGrid"></div>
+      </div>
+    </div>
+  </div>
+
+
+  <script type="module">
+    import { api, getCourseIdFromUrl } from "./js/api.js?v=2";
 
     const courseId = getCourseIdFromUrl();
+    let currentQuizData = null;
+    let currentQuizSession = null;
+    // Study mode state
+    let studyDocId = null;
+    let studyMaxPage = 1;
+    let studyCurrentPage = 1;
 
-    function showMessage(text, type = "info") {
-      messageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    // ── Helpers ──────────────────────────────────────────────────────────────
+
+    function showGlobal(text, type = "info") {
+      const d = document.getElementById("globalMessage");
+      d.innerHTML = `<div class="message ${type}">${text}</div>`;
+      setTimeout(() => d.innerHTML = "", 3500);
     }
 
-    function showUploadMessage(text, type = "info") {
-      uploadMessageDiv.innerHTML = `<div class="message ${type}">${text}</div>`;
+    function showUploadMsg(text, type = "info") {
+      document.getElementById("uploadMessage").innerHTML =
+        `<div class="message ${type}">${text}</div>`;
     }
 
-    function ensureLogin() {
-      if (!api.getToken()) {
-        window.location.href = "./index.html";
+    function badgeHtml(status) {
+      const cls = { ready:"badge-ready", pending:"badge-pending",
+                    processing:"badge-processing", failed:"badge-failed" }[status] || "badge-pending";
+      return `<span class="badge ${cls}">${status}</span>`;
+    }
+
+    function renderMath(el) {
+      if (window.MathJax && MathJax.typesetPromise) {
+        MathJax.typesetPromise([el]).catch(() => {});
       }
     }
 
-    function statusBadge(status) {
-      return `<span class="small">Status: ${status}</span>`;
+    // marked.js escapes backslashes inside LaTeX, breaking \(...\) and \[...\].
+    // Fix: extract all math spans first → parse markdown → restore math → render.
+    function renderMarkdown(el, text) {
+      if (!text) { el.innerHTML = ""; return; }
+
+      const stash = [];
+
+      // Protect display math \[...\] and inline math \(...\)
+      const protected_text = text
+        .replace(/\\\[[\s\S]*?\\\]/g, m => { stash.push(m); return `@@MATH${stash.length - 1}@@`; })
+        .replace(/\\\([\s\S]*?\\\)/g, m => { stash.push(m); return `@@MATH${stash.length - 1}@@`; });
+
+      // Parse markdown (now safe — no LaTeX inside)
+      let html = marked.parse(protected_text);
+
+      // Restore math tokens (they may be wrapped in <p> tags, that's OK)
+      html = html.replace(/@@MATH(\d+)@@/g, (_, i) => stash[parseInt(i, 10)]);
+
+      el.innerHTML = html;
+      renderMath(el);
     }
 
-    async function pollStatus(docId) {
-      const intervalId = setInterval(async () => {
+    function closeModal(id) {
+      document.getElementById(id).classList.remove("open");
+    }
+
+    // ── File upload ───────────────────────────────────────────────────────────
+
+    const fileUploadArea = document.getElementById("fileUploadArea");
+    const pdfFileInput   = document.getElementById("pdfFile");
+    fileUploadArea.addEventListener("click", () => pdfFileInput.click());
+    pdfFileInput.addEventListener("change", () => {
+      const f = pdfFileInput.files[0];
+      if (f) {
+        document.getElementById("fileLabel").textContent = `✅ ${f.name}`;
+        fileUploadArea.classList.add("has-file");
+      }
+    });
+
+    function pollStatus(docId) {
+      const timer = setInterval(async () => {
         try {
           const doc = await api.getDocumentStatus(docId);
           if (doc.status === "ready" || doc.status === "failed") {
-            clearInterval(intervalId);
+            clearInterval(timer);
             await loadCourse();
           }
-        } catch (e) {
-          clearInterval(intervalId);
-        }
+        } catch { clearInterval(timer); }
       }, 3000);
     }
 
-    function renderDocuments(documents) {
-      if (!Array.isArray(documents) || documents.length === 0) {
-        documentListDiv.innerHTML = `<p>No documents uploaded yet.</p>`;
+    document.getElementById("uploadBtn").addEventListener("click", async () => {
+      const file        = pdfFileInput.files[0];
+      const autoSummary = document.getElementById("autoSummaryCheck").checked;
+      if (!file) { showUploadMsg("Please select a PDF file.", "error"); return; }
+      try {
+        showUploadMsg("Uploading...", "info");
+        const result = await api.uploadDocument(courseId, file, autoSummary);
+        showUploadMsg(`Uploaded. Status: ${result.status}${autoSummary ? " — summary generating…" : ""}`, "success");
+        pdfFileInput.value = "";
+        document.getElementById("fileLabel").textContent = "📄 Click to select a PDF file";
+        fileUploadArea.classList.remove("has-file");
+        await loadCourse();
+        if (result.status === "pending" || result.status === "processing") pollStatus(result.id);
+      } catch (err) { showUploadMsg(err.message, "error"); }
+    });
+
+    // ── Render documents ──────────────────────────────────────────────────────
+
+    function populateDocSelects(docs) {
+      ["qaDocFilter", "quizDocFilter"].forEach(id => {
+        const sel = document.getElementById(id);
+        while (sel.options.length > 1) sel.remove(1);
+        docs.filter(d => d.status === "ready").forEach(d => {
+          sel.add(new Option(d.filename, d.id));
+        });
+      });
+    }
+
+    function renderDocuments(docs) {
+      const div = document.getElementById("documentList");
+      if (!docs || docs.length === 0) {
+        div.innerHTML = `<div class="empty-state">No documents uploaded yet.</div>`;
         return;
       }
+      populateDocSelects(docs);
 
-      documentListDiv.innerHTML = documents.map(doc => `
-        <div class="list-item">
-          <h3>${doc.filename}</h3>
-          <p>${statusBadge(doc.status)}</p>
-          <p class="small">Document ID: ${doc.id}</p>
-          <div class="inline-btns">
-            <button class="check-status" data-id="${doc.id}">Refresh Status</button>
-            <button class="view-summary" data-id="${doc.id}" ${doc.status !== "ready" ? "disabled" : ""}>View Summary</button>
-            <button class="danger delete-doc" data-id="${doc.id}">Delete</button>
+      div.innerHTML = docs.map(doc => `
+        <div class="doc-item" data-id="${doc.id}">
+          <div class="doc-item-header">
+            <div class="doc-item-info">
+              <h4>📄 ${doc.filename}</h4>
+              <div class="doc-meta">${badgeHtml(doc.status)} &nbsp;·&nbsp; ID: ${doc.id}</div>
+            </div>
+            <div class="doc-item-btns">
+              <button class="secondary summary-btn" data-id="${doc.id}"
+                ${doc.status !== "ready" ? "disabled" : ""}>Summary</button>
+              <button class="secondary km-btn" data-id="${doc.id}" data-name="${doc.filename}"
+                ${doc.status !== "ready" ? "disabled" : ""}>Knowledge Map</button>
+              <button class="secondary concepts-btn" data-id="${doc.id}" data-name="${doc.filename}"
+                ${doc.status !== "ready" ? "disabled" : ""}>Concepts</button>
+              <button class="secondary study-btn" data-id="${doc.id}" data-name="${doc.filename}"
+                ${doc.status !== "ready" ? "disabled" : ""}>Study</button>
+              <button class="danger delete-doc-btn" data-id="${doc.id}">Delete</button>
+            </div>
           </div>
-          <div id="summary-${doc.id}" class="pre-box" style="display:none;"></div>
         </div>
       `).join("");
 
-      document.querySelectorAll(".check-status").forEach(btn => {
+      // Summary
+      document.querySelectorAll(".summary-btn").forEach(btn =>
         btn.addEventListener("click", async () => {
           try {
-            const result = await api.getDocumentStatus(btn.dataset.id);
-            alert(`Document ${result.filename}: ${result.status}`);
-            await loadCourse();
-          } catch (err) {
-            alert(err.message);
-          }
-        });
-      });
+            const res = await api.getDocumentSummary(btn.dataset.id);
+            const sec = document.getElementById("summarySection");
+            document.getElementById("summaryTitle").textContent = `Summary — ${res.filename}`;
+            const content = document.getElementById("summaryContent");
+            renderMarkdown(content, res.summary);
+            sec.style.display = "";
+            sec.scrollIntoView({ behavior: "smooth", block: "start" });
+          } catch (err) { showGlobal(err.message, "error"); }
+        })
+      );
 
-      document.querySelectorAll(".view-summary").forEach(btn => {
+      // Knowledge Map
+      document.querySelectorAll(".km-btn").forEach(btn =>
         btn.addEventListener("click", async () => {
+          const sec = document.getElementById("knowledgeMapSection");
+          const content = document.getElementById("knowledgeMapContent");
+          const kmTitle = document.getElementById("kmTitle");
+          kmTitle.textContent = `Knowledge Map — ${btn.dataset.name}`;
+          content.innerHTML = `<div class="loading-text">Loading…</div>`;
+          sec.style.display = "";
+          sec.scrollIntoView({ behavior: "smooth", block: "start" });
           try {
-            const result = await api.getDocumentSummary(btn.dataset.id);
-            const box = document.getElementById(`summary-${btn.dataset.id}`);
-            box.style.display = "block";
-            box.textContent = result.summary || "No summary available.";
+            const res = await api.getKnowledgeMap(btn.dataset.id);
+            // Show cache status + regenerate button
+            const cached = res.cached;
+            kmTitle.innerHTML = `Knowledge Map — ${btn.dataset.name}
+              <span style="font-size:12px; font-weight:400; color:${cached ? '#34a853' : '#5f6368'}; margin-left:10px;">
+                ${cached ? '✓ Cached' : '✨ Newly generated'}
+              </span>
+              <button class="ghost regen-km-btn" data-id="${btn.dataset.id}" data-name="${btn.dataset.name}"
+                style="font-size:12px; padding:4px 10px; margin-left:8px; color:#1a73e8;">↻ Regenerate</button>`;
+            renderMarkdown(content, res.knowledge_map);
+            // Regenerate button
+            document.querySelector(".regen-km-btn").addEventListener("click", async (e) => {
+              e.stopPropagation();
+              const docId = e.target.dataset.id;
+              content.innerHTML = `<div class="loading-text">Regenerating… (15–30s)</div>`;
+              try {
+                const r = await api.getKnowledgeMap(docId, true);
+                kmTitle.querySelector(".regen-km-btn") && (kmTitle.querySelector("span").textContent = "✨ Regenerated");
+                renderMarkdown(content, r.knowledge_map);
+              } catch (err) {
+                content.innerHTML = `<div class="message error">${err.message}</div>`;
+              }
+            });
           } catch (err) {
-            alert(err.message);
+            content.innerHTML = `<div class="message error">${err.message}</div>`;
           }
-        });
-      });
+        })
+      );
 
-      document.querySelectorAll(".delete-doc").forEach(btn => {
+      // Concepts
+      document.querySelectorAll(".concepts-btn").forEach(btn =>
+        btn.addEventListener("click", async () => {
+          document.getElementById("conceptsModalTitle").textContent =
+            `Concept Cards — ${btn.dataset.name}`;
+          document.getElementById("conceptsLoading").style.display = "";
+          document.getElementById("conceptsContent").style.display = "none";
+          document.getElementById("conceptsModal").classList.add("open");
+          try {
+            const res = await api.getConcepts(btn.dataset.id);
+            renderConcepts(res.concepts || []);
+          } catch (err) {
+            document.getElementById("conceptsLoading").textContent = "Error: " + err.message;
+          }
+        })
+      );
+
+      // Study mode
+      document.querySelectorAll(".study-btn").forEach(btn =>
+        btn.addEventListener("click", () => openStudy(btn.dataset.id, btn.dataset.name, 1))
+      );
+
+      // Delete
+      document.querySelectorAll(".delete-doc-btn").forEach(btn =>
         btn.addEventListener("click", async () => {
           if (!confirm("Delete this document?")) return;
           try {
             await api.deleteDocument(btn.dataset.id);
-            showMessage("Document deleted.", "success");
+            showGlobal("Document deleted.", "success");
             await loadCourse();
-          } catch (err) {
-            showMessage(err.message, "error");
+          } catch (err) { showGlobal(err.message, "error"); }
+        })
+      );
+    }
+
+    document.getElementById("closeSummaryBtn").addEventListener("click", () =>
+      document.getElementById("summarySection").style.display = "none"
+    );
+    document.getElementById("closeKmBtn").addEventListener("click", () =>
+      document.getElementById("knowledgeMapSection").style.display = "none"
+    );
+
+    // ── Concept cards ─────────────────────────────────────────────────────────
+
+    function renderConcepts(concepts) {
+      document.getElementById("conceptsLoading").style.display = "none";
+      const content = document.getElementById("conceptsContent");
+      content.style.display = "";
+      const grid = document.getElementById("conceptGrid");
+      if (!concepts.length) {
+        grid.innerHTML = `<div class="empty-state">No concepts extracted.</div>`;
+        return;
+      }
+      grid.innerHTML = concepts.map(c => `
+        <div class="concept-card">
+          <div class="term">${c.term}</div>
+          <div class="definition">${c.definition}</div>
+          ${c.formula ? `<div class="formula">\\(${c.formula.replace(/^\\\(|\\\)$/g, "")}\\)</div>` : ""}
+          ${c.example ? `<div style="font-size:12px; color:#5f6368; margin-bottom:6px;">e.g. ${c.example}</div>` : ""}
+          ${c.related && c.related.length ? `<div class="related-tags">${c.related.map(r => `<span class="tag">${r}</span>`).join("")}</div>` : ""}
+        </div>
+      `).join("");
+      renderMath(grid);
+    }
+
+    document.getElementById("closeConceptsBtn").addEventListener("click", () =>
+      closeModal("conceptsModal")
+    );
+    document.getElementById("conceptsModal").addEventListener("click", e => {
+      if (e.target === document.getElementById("conceptsModal")) closeModal("conceptsModal");
+    });
+
+    // ── Study mode ────────────────────────────────────────────────────────────
+
+    async function openStudy(docId, docName, page) {
+      studyDocId = docId;
+      studyCurrentPage = page;
+      document.getElementById("studyModalTitle").textContent = `Study — ${docName}`;
+      document.getElementById("studyModal").classList.add("open");
+      await loadStudyPage(page);
+    }
+
+    async function loadStudyPage(page) {
+      document.getElementById("studyLoading").style.display = "";
+      document.getElementById("studyContent").style.display = "none";
+
+      try {
+        const res = await api.explainPage(studyDocId, page);
+        studyMaxPage = res.max_page || page;
+        studyCurrentPage = res.page;
+
+        document.getElementById("pageInput").value = studyCurrentPage;
+        document.getElementById("pageInput").max = studyMaxPage;
+        document.getElementById("pageTotal").textContent = `/ ${studyMaxPage}`;
+        document.getElementById("studyRaw").textContent = res.raw || "(no text)";
+
+        const expEl = document.getElementById("studyExplanation");
+        renderMarkdown(expEl, res.explanation);
+
+        document.getElementById("studyLoading").style.display = "none";
+        document.getElementById("studyContent").style.display = "";
+      } catch (err) {
+        document.getElementById("studyLoading").textContent = "Error: " + err.message;
+      }
+    }
+
+    document.getElementById("prevPageBtn").addEventListener("click", () => {
+      if (studyCurrentPage > 1) loadStudyPage(studyCurrentPage - 1);
+    });
+    document.getElementById("nextPageBtn").addEventListener("click", () => {
+      if (studyCurrentPage < studyMaxPage) loadStudyPage(studyCurrentPage + 1);
+    });
+    document.getElementById("goPageBtn").addEventListener("click", () => {
+      const p = parseInt(document.getElementById("pageInput").value);
+      if (p >= 1 && p <= studyMaxPage) loadStudyPage(p);
+    });
+    document.getElementById("pageInput").addEventListener("keydown", e => {
+      if (e.key === "Enter") document.getElementById("goPageBtn").click();
+    });
+    document.getElementById("closeStudyBtn").addEventListener("click", () =>
+      closeModal("studyModal")
+    );
+    document.getElementById("studyModal").addEventListener("click", e => {
+      if (e.target === document.getElementById("studyModal")) closeModal("studyModal");
+    });
+
+    // ── Load course ───────────────────────────────────────────────────────────
+
+    async function loadCourse() {
+      if (!courseId) return;
+      try {
+        const course = await api.getCourseDetail(courseId);
+        document.getElementById("courseName").textContent = course.name;
+        document.getElementById("courseDesc").textContent = course.description || "";
+        document.title = `CourseMate - ${course.name}`;
+        renderDocuments(course.documents || []);
+        await loadQAHistory();
+        await loadQuizHistory();
+      } catch (err) {
+        document.getElementById("courseName").textContent = "Error loading course";
+      }
+    }
+
+    // ── Q&A ───────────────────────────────────────────────────────────────────
+
+    document.getElementById("askBtn").addEventListener("click", async () => {
+      const question  = document.getElementById("qaQuestion").value.trim();
+      const docId     = document.getElementById("qaDocFilter").value || null;
+      if (!question) return;
+
+      const answerBox  = document.getElementById("qaAnswer");
+      const answerText = document.getElementById("qaAnswerText");
+      const sourcesDiv = document.getElementById("qaSourcesText");
+
+      answerBox.style.display = "";
+      answerText.innerHTML    = "<em>Thinking…</em>";
+      sourcesDiv.textContent  = "";
+
+      try {
+        const res = await api.askQuestion(courseId, question, docId ? parseInt(docId) : null);
+        renderMarkdown(answerText, res.answer);
+        if (res.sources && res.sources.length) {
+          sourcesDiv.textContent = "Sources: " + res.sources.map(s => `p.${s.page_number}`).join(", ");
+        }
+        await loadQAHistory();
+      } catch (err) {
+        answerText.textContent = "Error: " + err.message;
+      }
+    });
+
+    async function loadQAHistory() {
+      try {
+        const history = await api.getQAHistory(courseId);
+        const div = document.getElementById("qaHistory");
+        if (!history || history.length === 0) {
+          div.innerHTML = `<div class="empty-state">No questions yet.</div>`;
+          return;
+        }
+        div.innerHTML = history.map(h => `
+          <div class="qa-history-item">
+            <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:8px; margin-bottom:8px;">
+              <div class="question" style="margin:0;">Q: ${h.question}</div>
+              <button class="ghost delete-qa-btn" data-id="${h.id}"
+                style="font-size:12px; padding:4px 10px; color:#ea4335; flex-shrink:0;">✕</button>
+            </div>
+            <div class="md-content">${marked.parse(h.answer || "")}</div>
+          </div>
+        `).join("");
+        renderMath(div);
+
+        document.querySelectorAll(".delete-qa-btn").forEach(btn => {
+          btn.addEventListener("click", async (e) => {
+            e.stopPropagation();
+            const qaId = btn.dataset.id;
+            console.log("[QA Delete] courseId=", courseId, "qaId=", qaId);
+            try {
+              const res = await api.deleteQA(courseId, qaId);
+              console.log("[QA Delete] success:", res);
+              await loadQAHistory();
+            } catch (err) {
+              console.error("[QA Delete] error:", err);
+              alert("Delete failed: " + err.message);
+            }
+          });
+        });
+      } catch { /* silent */ }
+    }
+
+    // ── Quiz (Full-screen Modal) ───────────────────────────────────────────────
+
+    const quizModal = document.getElementById("quizModal");
+
+    function openQuizModal() { quizModal.style.display = ""; document.body.style.overflow = "hidden"; }
+    function closeQuizModal() { quizModal.style.display = "none"; document.body.style.overflow = ""; }
+
+    document.getElementById("closeQuizModalBtn").addEventListener("click", () => {
+      if (confirm("Close quiz? Your progress will be lost.")) closeQuizModal();
+    });
+    document.getElementById("retakeQuizBtn").addEventListener("click", () => closeQuizModal());
+
+    document.getElementById("generateQuizBtn").addEventListener("click", async () => {
+      const num        = parseInt(document.getElementById("numQuestions").value) || 5;
+      const docId      = document.getElementById("quizDocFilter").value || null;
+      const difficulty = document.getElementById("quizDifficulty").value || "medium";
+
+      // Open modal in loading state
+      document.getElementById("quizLoadingState").style.display = "";
+      document.getElementById("quizQuestionsWrap").style.display = "none";
+      document.getElementById("quizResultsWrap").style.display = "none";
+      document.getElementById("quizModalTitle").textContent = "Generating Quiz…";
+      document.getElementById("quizModalMeta").textContent = "";
+      openQuizModal();
+
+      try {
+        const res = await api.generateQuiz(courseId, num, docId ? parseInt(docId) : null, difficulty);
+        currentQuizData    = res;
+        currentQuizSession = res.session_id;
+
+        const mcqCount   = res.questions.filter(q => q.type === "mcq").length;
+        const saCount    = res.questions.filter(q => q.type === "short_answer").length;
+        const calcCount  = res.questions.filter(q => q.type === "calculation").length;
+
+        const diffLabel = { easy:"🟢 Easy", medium:"🟡 Medium", hard:"🔴 Hard" }[difficulty] || difficulty;
+        document.getElementById("quizModalTitle").textContent = `Quiz — ${res.questions.length} Questions`;
+        document.getElementById("quizModalMeta").textContent =
+          `${diffLabel} · ${mcqCount} MCQ · ${saCount} Short Answer · ${calcCount} Calculation`;
+
+        document.getElementById("quizLoadingState").style.display = "none";
+        renderQuizQuestions(res.questions);
+        document.getElementById("quizQuestionsWrap").style.display = "";
+        quizModal.scrollTo({ top: 0 });
+      } catch (err) {
+        document.getElementById("quizLoadingState").innerHTML =
+          `<div class="message error">${err.message}</div>`;
+      }
+    });
+
+    const MATH_SYMBOLS = [
+      { label: "x²",   insert: "^2" },
+      { label: "xⁿ",   insert: "^{}" },
+      { label: "√",    insert: "\\sqrt{}" },
+      { label: "∛",    insert: "\\sqrt[3]{}" },
+      { label: "a/b",  insert: "\\frac{}{}" },
+      { label: "∫",    insert: "\\int_{}^{}" },
+      { label: "Σ",    insert: "\\sum_{i=1}^{n}" },
+      { label: "∂",    insert: "\\partial" },
+      { label: "∞",    insert: "\\infty" },
+      { label: "±",    insert: "\\pm" },
+      { label: "×",    insert: "\\times" },
+      { label: "≤",    insert: "\\leq" },
+      { label: "≥",    insert: "\\geq" },
+      { label: "≠",    insert: "\\neq" },
+      { label: "π",    insert: "\\pi" },
+      { label: "θ",    insert: "\\theta" },
+      { label: "α",    insert: "\\alpha" },
+      { label: "β",    insert: "\\beta" },
+      { label: "λ",    insert: "\\lambda" },
+      { label: "→",    insert: "\\to" },
+      { label: "⟹",   insert: "\\Rightarrow" },
+      { label: "( )",  insert: "\\left(\\right)" },
+      { label: "[ ]",  insert: "\\left[\\right]" },
+      { label: "| |",  insert: "\\left|\\right|" },
+      { label: "matrix", insert: "\\begin{pmatrix} a & b \\\\ c & d \\end{pmatrix}" },
+    ];
+
+    function insertAtCursor(textarea, text) {
+      const start = textarea.selectionStart;
+      const end   = textarea.selectionEnd;
+      const val   = textarea.value;
+      textarea.value = val.slice(0, start) + text + val.slice(end);
+      const pos = start + text.length;
+      textarea.setSelectionRange(pos, pos);
+      textarea.focus();
+      textarea.dispatchEvent(new Event("input"));
+    }
+
+    function renderQuizQuestions(questions) {
+      const container = document.getElementById("quizQuestionsContainer");
+      container.innerHTML = questions.map((q, i) => {
+        const typeLabel = { mcq: "Multiple Choice", short_answer: "Short Answer", calculation: "Calculation" }[q.type] || q.type;
+
+        let inputHtml;
+        if (q.type === "mcq") {
+          inputHtml = q.options.map(opt => `
+            <label class="option-row">
+              <input type="radio" name="q${i}" value="${opt}" />
+              ${opt}
+            </label>`).join("");
+        } else if (q.type === "calculation") {
+          const toolbarHtml = `<div class="math-toolbar" id="toolbar_${q.id}">` +
+            MATH_SYMBOLS.map(s =>
+              `<button type="button" data-insert="${s.insert.replace(/"/g,'&quot;')}" data-target="ans_${q.id}">${s.label}</button>`
+            ).join("") + `</div>`;
+          inputHtml = `
+            ${toolbarHtml}
+            <textarea class="open-answer-area" id="ans_${q.id}"
+              placeholder="Write using LaTeX (e.g. \\frac{1}{2}) or plain text (e.g. 1/2). Show your steps."></textarea>
+            <div class="math-preview" id="preview_${q.id}">
+              <span style="color:#9aa0a6; font-size:12px;">Preview will appear here as you type…</span>
+            </div>`;
+        } else {
+          inputHtml = `<textarea class="open-answer-area" id="ans_${q.id}"
+            placeholder="Write your answer here…"></textarea>`;
+        }
+
+        return `
+          <div class="quiz-q-card">
+            <span class="q-label ${q.type}">${typeLabel}</span>
+            <div class="q-text">${i + 1}. ${q.question}</div>
+            ${inputHtml}
+          </div>`;
+      }).join("");
+
+      renderMath(container);
+
+      // Wire up math toolbar buttons
+      container.querySelectorAll(".math-toolbar button").forEach(btn => {
+        btn.addEventListener("click", () => {
+          const ta = document.getElementById(btn.dataset.target);
+          if (ta) insertAtCursor(ta, btn.dataset.insert);
+        });
+      });
+
+      // Wire up live preview for calculation textareas
+      questions.filter(q => q.type === "calculation").forEach(q => {
+        const ta      = document.getElementById(`ans_${q.id}`);
+        const preview = document.getElementById(`preview_${q.id}`);
+        if (!ta || !preview) return;
+        ta.addEventListener("input", () => {
+          const raw = ta.value.trim();
+          if (!raw) {
+            preview.innerHTML = `<span style="color:#9aa0a6; font-size:12px;">Preview will appear here as you type…</span>`;
+            return;
+          }
+          // Wrap in display math if it looks like LaTeX, else show as-is
+          const hasLatex = /\\[a-zA-Z{]/.test(raw) || /\^|_|\{/.test(raw);
+          preview.innerHTML = hasLatex ? `\\[${raw}\\]` : raw;
+          if (window.MathJax && MathJax.typesetPromise) {
+            MathJax.typesetPromise([preview]).catch(() => {});
           }
         });
       });
     }
 
-    async function loadCourse() {
-      if (!courseId) {
-        courseInfoDiv.innerHTML = `<div class="message error">Missing course_id in URL.</div>`;
-        return;
-      }
+    document.getElementById("submitQuizBtn").addEventListener("click", async () => {
+      if (!currentQuizData || !currentQuizSession) return;
+
+      const btn = document.getElementById("submitQuizBtn");
+      btn.disabled = true;
+      btn.textContent = "Grading… (open questions may take 10–20s)";
+
+      const answers = currentQuizData.questions.map((q, i) => {
+        if (q.type === "mcq") {
+          const sel = document.querySelector(`input[name="q${i}"]:checked`);
+          return { question_id: q.id, answer: sel ? sel.value : "" };
+        } else {
+          const ta = document.getElementById(`ans_${q.id}`);
+          return { question_id: q.id, answer: ta ? ta.value.trim() : "" };
+        }
+      });
 
       try {
-        const course = await api.getCourseDetail(courseId);
-        courseInfoDiv.innerHTML = `
-          <h2>${course.name}</h2>
-          <p class="small">Course ID: ${course.id}</p>
-        `;
-        renderDocuments(course.documents || []);
+        const res = await api.submitQuiz(currentQuizSession, answers);
+        showQuizResult(res);
+        await loadQuizHistory();
       } catch (err) {
-        courseInfoDiv.innerHTML = `<div class="message error">${err.message}</div>`;
+        btn.disabled = false;
+        btn.textContent = "Submit Quiz";
+        showGlobal(err.message, "error");
+      }
+    });
+
+    function showQuizResult(res) {
+      document.getElementById("quizQuestionsWrap").style.display = "none";
+
+      // Score box
+      const pct = Math.round(res.score / res.total * 100);
+      const color = pct >= 80 ? "#137333" : pct >= 60 ? "#f29900" : "#c5221f";
+      document.getElementById("quizScoreBox").innerHTML = `
+        <div style="font-size:48px; font-weight:700; color:${color};">${pct}%</div>
+        <div style="font-size:16px; color:#5f6368; margin-top:4px;">Score: ${res.score} / ${res.total}</div>
+        <div style="font-size:13px; color:#9aa0a6; margin-top:4px;">
+          ${pct >= 80 ? "Excellent work!" : pct >= 60 ? "Good effort, review the mistakes below." : "Keep practicing — check the explanations below."}
+        </div>`;
+
+      // Per-question detail
+      const detail = document.getElementById("quizResultDetail");
+      detail.innerHTML = (res.results || []).map((r, i) => {
+        const qObj = (currentQuizData?.questions || []).find(q => q.id === r.question_id);
+        const qText  = qObj ? qObj.question : `Question ${r.question_id}`;
+        const qType  = r.type || "mcq";
+        const typeLabel = { mcq: "Multiple Choice", short_answer: "Short Answer", calculation: "Calculation" }[qType] || qType;
+
+        return `
+          <div class="quiz-result-card ${r.correct ? "correct-card" : "wrong-card"}">
+            <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;">
+              <span style="font-size:18px;">${r.correct ? "✅" : "❌"}</span>
+              <div>
+                <span class="q-label ${qType}" style="margin-bottom:6px;">${typeLabel}</span>
+                <div style="font-size:14px; font-weight:600; line-height:1.6;">${i + 1}. ${qText}</div>
+              </div>
+            </div>
+
+            <div class="result-section">
+              <div class="label">Your Answer</div>
+              <div class="val" style="color:${r.correct ? "#137333" : "#c5221f"};">
+                ${r.user_answer || "(no answer)"}
+              </div>
+            </div>
+
+            ${!r.correct ? `
+            <div class="result-section">
+              <div class="label">Reference Answer</div>
+              <div class="val">${r.correct_answer}</div>
+            </div>` : ""}
+
+            ${r.feedback ? `
+            <div class="result-section">
+              <div class="label">Feedback</div>
+              <div class="val" style="color:#5f6368;">${r.feedback}</div>
+            </div>` : ""}
+
+            ${r.explanation ? `
+            <div class="result-section">
+              <div class="label">💡 Explanation</div>
+              <div class="val md-content">${marked.parse(r.explanation)}</div>
+            </div>` : ""}
+          </div>`;
+      }).join("");
+
+      document.getElementById("quizResultsWrap").style.display = "";
+      renderMath(detail);
+      quizModal.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    async function loadQuizHistory() {
+      try {
+        const history = await api.getQuizHistory(courseId);
+        const div = document.getElementById("quizHistory");
+        if (!history || history.length === 0) {
+          div.innerHTML = `<div class="empty-state">No quizzes yet.</div>`;
+          return;
+        }
+        div.innerHTML = history.slice().reverse().map(s => `
+          <div class="quiz-history-item" data-session="${s.session_id}">
+            <div>
+              <div style="font-size:14px; font-weight:500;">${new Date(s.created_at).toLocaleString()}</div>
+              <div style="font-size:13px; color:#5f6368;">Score: ${s.score ?? "?"} / ${s.total ?? "?"}</div>
+            </div>
+            <div style="display:flex; gap:8px; align-items:center;">
+              <button class="secondary review-quiz-btn" data-id="${s.session_id}"
+                style="font-size:12px; padding:6px 12px;">Review</button>
+              <button class="ghost delete-quiz-btn" data-session="${s.session_id}"
+                style="font-size:12px; padding:6px 10px; color:#ea4335;" title="Delete record">✕</button>
+            </div>
+          </div>
+        `).join("");
+        document.querySelectorAll(".review-quiz-btn").forEach(btn =>
+          btn.addEventListener("click", () => openReview(btn.dataset.id))
+        );
+        document.querySelectorAll(".delete-quiz-btn").forEach(btn =>
+          btn.addEventListener("click", async () => {
+            const sessionId = btn.dataset.session;
+            if (!confirm("Delete this quiz record?")) return;
+            try {
+              await api.deleteQuizAttempt(courseId, sessionId);
+              btn.closest(".quiz-history-item").remove();
+              const remaining = document.querySelectorAll(".quiz-history-item");
+              if (remaining.length === 0) {
+                document.getElementById("quizHistory").innerHTML =
+                  `<div class="empty-state">No quizzes yet.</div>`;
+              }
+            } catch (e) {
+              alert("Delete failed: " + e.message);
+            }
+          })
+        );
+      } catch { /* silent */ }
+    }
+
+    // ── Quiz Review (reuses full-screen modal) ────────────────────────────────
+
+    async function openReview(sessionId) {
+      document.getElementById("quizLoadingState").style.display = "";
+      document.getElementById("quizLoadingState").textContent = "Loading review…";
+      document.getElementById("quizQuestionsWrap").style.display = "none";
+      document.getElementById("quizResultsWrap").style.display = "none";
+      document.getElementById("quizModalTitle").textContent = "Quiz Review";
+      document.getElementById("quizModalMeta").textContent = "";
+      openQuizModal();
+
+      try {
+        const res = await api.getQuizResult(sessionId);
+        document.getElementById("quizLoadingState").style.display = "none";
+
+        const pct = Math.round(res.score / res.total * 100);
+        const color = pct >= 80 ? "#137333" : pct >= 60 ? "#f29900" : "#c5221f";
+        document.getElementById("quizScoreBox").innerHTML = `
+          <div style="font-size:48px; font-weight:700; color:${color};">${pct}%</div>
+          <div style="font-size:16px; color:#5f6368; margin-top:4px;">Score: ${res.score} / ${res.total}</div>
+          <div style="font-size:13px; color:#9aa0a6; margin-top:4px;">${new Date(res.created_at).toLocaleString()}</div>`;
+
+        const detail = document.getElementById("quizResultDetail");
+        detail.innerHTML = (res.questions || []).map((q, i) => {
+          const qType = q.type || "mcq";
+          const typeLabel = { mcq: "Multiple Choice", short_answer: "Short Answer", calculation: "Calculation" }[qType] || qType;
+          return `
+            <div class="quiz-result-card ${q.correct ? "correct-card" : "wrong-card"}">
+              <div style="display:flex; gap:8px; align-items:flex-start; margin-bottom:10px;">
+                <span style="font-size:18px;">${q.correct ? "✅" : "❌"}</span>
+                <div>
+                  <span class="q-label ${qType}" style="margin-bottom:6px;">${typeLabel}</span>
+                  <div style="font-size:14px; font-weight:600; line-height:1.6;">${i + 1}. ${q.question}</div>
+                </div>
+              </div>
+              <div class="result-section">
+                <div class="label">Your Answer</div>
+                <div class="val" style="color:${q.correct ? "#137333" : "#c5221f"};">${q.user_answer || "(no answer)"}</div>
+              </div>
+              ${!q.correct ? `
+              <div class="result-section">
+                <div class="label">Reference Answer</div>
+                <div class="val">${q.correct_answer}</div>
+              </div>` : ""}
+              ${q.feedback ? `
+              <div class="result-section">
+                <div class="label">Feedback</div>
+                <div class="val" style="color:#5f6368;">${q.feedback}</div>
+              </div>` : ""}
+              ${q.explanation ? `
+              <div class="result-section">
+                <div class="label">💡 Explanation</div>
+                <div class="val md-content">${marked.parse(q.explanation)}</div>
+              </div>` : ""}
+            </div>`;
+        }).join("");
+
+        document.getElementById("quizResultsWrap").style.display = "";
+        renderMath(detail);
+        quizModal.scrollTo({ top: 0 });
+      } catch (err) {
+        document.getElementById("quizLoadingState").textContent = "Error: " + err.message;
       }
     }
 
-    document.getElementById("uploadBtn").addEventListener("click", async () => {
-      const file = document.getElementById("pdfFile").files[0];
-      const autoSummary = document.getElementById("autoSummary").value === "true";
+    // ── Auth & Init ───────────────────────────────────────────────────────────
 
-      if (!courseId) {
-        showUploadMessage("Missing course_id.", "error");
-        return;
-      }
-
-      if (!file) {
-        showUploadMessage("Please choose a PDF file.", "error");
-        return;
-      }
-
+    document.getElementById("clearQABtn").addEventListener("click", async () => {
+      if (!confirm("Clear all Q&A history?")) return;
+      console.log("[QA Clear] courseId=", courseId);
       try {
-        const result = await api.uploadDocument(courseId, file, autoSummary);
-        showUploadMessage(`Upload success. Document ID: ${result.id}, status: ${result.status}`, "success");
-        await loadCourse();
-        if (result.status === "pending" || result.status === "processing") {
-          pollStatus(result.id);
-        }
+        const res = await api.clearQAHistory(courseId);
+        console.log("[QA Clear] success:", res);
+        await loadQAHistory();
       } catch (err) {
-        showUploadMessage(err.message, "error");
+        console.error("[QA Clear] error:", err);
+        alert("Clear failed: " + err.message);
       }
     });
 
-    document.getElementById("qaLink").addEventListener("click", (e) => {
-      e.preventDefault();
-      goToQA(courseId);
+    document.getElementById("logoutLink").addEventListener("click", e => {
+      e.preventDefault(); api.clearToken(); window.location.href = "./index.html";
     });
 
-    document.getElementById("quizLink").addEventListener("click", (e) => {
-      e.preventDefault();
-      goToQuiz(courseId);
-    });
-
-    ensureLogin();
-    loadCourse();
+    if (!api.getToken()) window.location.href = "./index.html";
+    if (!courseId) document.getElementById("courseName").textContent = "No course selected";
+    else loadCourse();
   </script>
 </body>
 </html>

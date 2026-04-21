@@ -116,6 +116,11 @@ def process_document(document_id: int, pdf_path: str, auto_summary: bool = True)
 
 def run_worker() -> None:
     """Poll SQS indefinitely and process each message."""
+    if not SQS_QUEUE_URL:
+        print("SQS_QUEUE_URL not configured — running in idle mode (API spawns local workers).")
+        while True:
+            time.sleep(60)
+
     sqs = boto3.client("sqs", region_name=AWS_REGION)
     print(f"Worker started. Polling {SQS_QUEUE_URL} ...")
 

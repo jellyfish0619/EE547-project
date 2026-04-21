@@ -77,14 +77,7 @@ def generate(
         )
 
     if body.document_id is not None:
-        try:
-            did = int(body.document_id)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid document_id",
-            )
-        doc = db.get(Document, did)
+        doc = db.get(Document, body.document_id)
         if doc is None or doc.course_id != course_id or doc.status != "ready":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -98,6 +91,7 @@ def generate(
         db,
         num_questions=body.num_questions,
         document_id=body.document_id,
+        difficulty=body.difficulty,
     )
     if not raw_list:
         raise HTTPException(
@@ -117,9 +111,11 @@ def generate(
     questions_out = [
         QuizQuestionOut(
             id=int(item["id"]),
+            type=str(item.get("type", "mcq")),
             question=item["question"],
-            options=list(item["options"]),
+            options=list(item.get("options", [])),
             answer=str(item["answer"]),
+            explanation=str(item.get("explanation", "")),
         )
         for item in raw_list
         if isinstance(item, dict)
@@ -146,28 +142,66 @@ def submit(
             detail="Must submit exactly one answer per question",
         )
 
+    # Separate MCQ (local grading) from open questions (LLM grading)
     results: list[QuizResultItem] = []
+    open_items = []
     score = 0
+
     for ans in body.answers:
         qrow = by_id.get(ans.question_id)
         if not qrow:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Unknown question_id {ans.question_id}",
-            )
-        correct_letter = _normalize_choice(str(qrow.get("answer", "A")))
-        given = _normalize_choice(ans.answer)
-        ok = given == correct_letter
-        if ok:
-            score += 1
-        results.append(
-            QuizResultItem(
+            raise HTTPException(status_code=400, detail=f"Unknown question_id {ans.question_id}")
+
+        qtype = qrow.get("type", "mcq")
+        explanation = str(qrow.get("explanation", ""))
+
+        if qtype == "mcq":
+            correct_letter = _normalize_choice(str(qrow.get("answer", "A")))
+            given = _normalize_choice(ans.answer)
+            ok = given == correct_letter
+            if ok:
+                score += 1
+            results.append(QuizResultItem(
                 question_id=ans.question_id,
+                type=qtype,
                 correct=ok,
                 correct_answer=correct_letter,
-                user_answer=given,
-            )
-        )
+                explanation=explanation,
+                user_answer=ans.answer,
+                feedback=None,
+            ))
+        else:
+            # Queue for LLM grading
+            open_items.append({
+                "question_id": ans.question_id,
+                "type": qtype,
+                "question": qrow.get("question", ""),
+                "reference_answer": qrow.get("answer", ""),
+                "user_answer": ans.answer or "(no answer)",
+            })
+            # Placeholder, will be replaced after LLM grading
+            results.append(QuizResultItem(
+                question_id=ans.question_id,
+                type=qtype,
+                correct=False,
+                correct_answer=str(qrow.get("answer", "")),
+                explanation=explanation,
+                user_answer=ans.answer,
+                feedback=None,
+            ))
+
+    # LLM grade open questions
+    if open_items:
+        from worker.llm import grade_open_answers
+        grades = grade_open_answers(open_items)
+        grade_by_id = {g["question_id"]: g for g in grades}
+        for r in results:
+            if r.type != "mcq" and r.question_id in grade_by_id:
+                g = grade_by_id[r.question_id]
+                r.correct = bool(g.get("correct", False))
+                r.feedback = str(g.get("feedback", ""))
+                if r.correct:
+                    score += 1
 
     total = len(by_id)
     attempt = QuizAttempt(
@@ -216,10 +250,13 @@ def quiz_result(
         r = result_by_id.get(qid, {})
         questions.append(QuizDetailQuestion(
             question_id=qid,
+            type=str(q.get("type", "mcq")),
             question=q.get("question", ""),
             options=list(q.get("options", [])),
             correct_answer=str(q.get("answer", "")),
+            explanation=str(q.get("explanation", "")),
             user_answer=r.get("user_answer"),
+            feedback=r.get("feedback"),
             correct=bool(r.get("correct", False)),
         ))
 
@@ -253,3 +290,24 @@ def history(
         )
         for r in rows
     ]
+
+
+@router.delete("/courses/{course_id}/quiz/{session_id}")
+def delete_quiz_attempt(
+    course_id: int,
+    session_id: UUID,
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    _course_for_user(db, course_id, user)
+    attempt = db.scalar(
+        select(QuizAttempt).where(
+            QuizAttempt.session_id == session_id,
+            QuizAttempt.user_id == user.id,
+        )
+    )
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Quiz record not found")
+    db.delete(attempt)
+    db.commit()
+    return {"message": "Deleted"}

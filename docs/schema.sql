@@ -36,8 +36,10 @@ CREATE TABLE IF NOT EXISTS documents (
     filename    TEXT NOT NULL,
     s3_key      TEXT,
     status      TEXT NOT NULL DEFAULT 'pending',
-    summary     TEXT,
-    created_at  TIMESTAMPTZ DEFAULT NOW()
+    summary       TEXT,
+    knowledge_map TEXT,
+    concepts      JSONB,
+    created_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- ============================================
