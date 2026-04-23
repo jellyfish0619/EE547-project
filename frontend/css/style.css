@@ -251,7 +251,7 @@ button.ghost:hover { background: #f1f3f4; }
 
 /* ── Pre/Code Box ── */
 .pre-box {
-  white-space: pre-wrap;
+  white-space: normal;
   background: #f8f9fa;
   border: 1px solid #e0e0e0;
   border-radius: 8px;

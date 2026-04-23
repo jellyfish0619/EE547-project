@@ -1,10 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
+  meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>CourseMate - Q&A</title>
   <link rel="stylesheet" href="./css/style.css"/>
+  <script>
+  MathJax = {
+    tex: {
+      inlineMath: [['$', '$'], ['\\(', '\\)']],
+      displayMath: [['$$', '$$'], ['\\[', '\\]']]
+    }
+  };
+  </script>
+  <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
 </head>
 <body>
   <div class="container">
@@ -76,6 +85,7 @@
         </div>
       `).join("");
     }
+    if (window.MathJax) MathJax.typesetPromise([historyListDiv]);
 
     async function loadHistory() {
       try {
@@ -116,6 +126,7 @@
           ${sourcesHtml}
         `;
 
+        if (window.MathJax) MathJax.typesetPromise([answerResultDiv]);
         document.getElementById("questionInput").value = "";
         await loadHistory();
       } catch (err) {

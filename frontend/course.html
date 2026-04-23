@@ -827,11 +827,16 @@
               <button class="ghost delete-qa-btn" data-id="${h.id}"
                 style="font-size:12px; padding:4px 10px; color:#ea4335; flex-shrink:0;">✕</button>
             </div>
-            <div class="md-content">${marked.parse(h.answer || "")}</div>
-          </div>
+             <div class="md-content" data-raw="${encodeURIComponent(h.answer || "")}">
+      	${marked.parse(h.answer || "")}
+    		</div>
+  		</div>
         `).join("");
-        renderMath(div);
-
+        
+	div.querySelectorAll('.md-content[data-raw]').forEach(el => {
+ 		 const raw = decodeURIComponent(el.getAttribute('data-raw'));
+  		renderMarkdown(el, raw);
+		});
         document.querySelectorAll(".delete-qa-btn").forEach(btn => {
           btn.addEventListener("click", async (e) => {
             e.stopPropagation();
