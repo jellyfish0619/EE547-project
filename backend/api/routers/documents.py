@@ -25,6 +25,17 @@ from api.schemas import (
 router = APIRouter(tags=["documents"])
 
 
+def _spawn_local_worker(local_pdf: Path, doc_id: int, auto_summary: bool = True) -> None:
+    settings = get_settings()
+    backend_root = Path(__file__).resolve().parents[2]
+    worker_main = backend_root / "worker" / "main.py"
+    env = {**os.environ, "DATABASE_URL": settings.psycopg_dsn()}
+    cmd = [sys.executable, str(worker_main), "--local", str(local_pdf.resolve()), str(doc_id)]
+    if not auto_summary:
+        cmd.append("--no-summary")
+    subprocess.Popen(cmd, cwd=str(backend_root), env=env)
+
+
 def _require_course(db: Session, course_id: int, user: User) -> Course:
     course = db.get(Course, course_id)
     if course is None or course.owner_id != user.id:
@@ -41,16 +52,6 @@ def _require_document(db: Session, doc_id: int, user: User) -> Document:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
     return doc
 
-
-def _spawn_local_worker(local_pdf: Path, doc_id: int, auto_summary: bool = True) -> None:
-    settings = get_settings()
-    backend_root = Path(__file__).resolve().parents[2]
-    worker_main = backend_root / "worker" / "main.py"
-    env = {**os.environ, "DATABASE_URL": settings.psycopg_dsn()}
-    cmd = [sys.executable, str(worker_main), "--local", str(local_pdf.resolve()), str(doc_id)]
-    if not auto_summary:
-        cmd.append("--no-summary")
-    subprocess.Popen(cmd, cwd=str(backend_root), env=env)
 
 
 @router.post(

@@ -51,7 +51,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     page        INT NOT NULL,
     chunk_index INT NOT NULL,
     text        TEXT NOT NULL,
-    embedding   VECTOR(384),
+    embedding   VECTOR(1536),
     UNIQUE (document_id, page, chunk_index)
 );
 

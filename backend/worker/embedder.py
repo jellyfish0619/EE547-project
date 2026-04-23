@@ -1,12 +1,9 @@
 """
-Embedder — converts text chunks into vector embeddings and stores them in PostgreSQL (pgvector).
+Embedder — converts text chunks into vector embeddings via OpenAI API,
+then stores them in PostgreSQL (pgvector).
 
-Pipeline:
-    chunks (from pdf_parser) ──► embed_chunks() ──► store_chunks()
-
-Each chunk dict is extended with an "embedding" key (list[float]) after embed_chunks().
-
-Model: all-MiniLM-L6-v2  (384-dim, fast, runs on CPU, ~80 MB)
+Model: text-embedding-3-small  (1536-dim, better quality than local MiniLM)
+Cost:  ~$0.00002 / 1K tokens — a 100-page PDF costs < $0.002
 """
 
 from __future__ import annotations
@@ -16,22 +13,24 @@ from typing import List
 
 import psycopg2
 from pgvector.psycopg2 import register_vector
-from sentence_transformers import SentenceTransformer
+from openai import OpenAI
 
 # ---------------------------------------------------------------------------
-# Model (lazy singleton — loaded once per process)
+# Config
 # ---------------------------------------------------------------------------
 
-_MODEL: SentenceTransformer | None = None
-MODEL_NAME = os.getenv("EMBED_MODEL", "all-MiniLM-L6-v2")
-EMBED_DIM = 384  # dimension for all-MiniLM-L6-v2
+EMBED_MODEL = os.getenv("OPENAI_EMBED_MODEL", "text-embedding-3-small")
+EMBED_DIM   = 1536   # text-embedding-3-small native dimension
+BATCH_SIZE  = 512    # OpenAI accepts up to 2048 inputs per call; 512 is safe
+
+_client: OpenAI | None = None
 
 
-def _get_model() -> SentenceTransformer:
-    global _MODEL
-    if _MODEL is None:
-        _MODEL = SentenceTransformer(MODEL_NAME)
-    return _MODEL
+def _get_client() -> OpenAI:
+    global _client
+    if _client is None:
+        _client = OpenAI(api_key=os.environ["OPENAI_API_KEY"])
+    return _client
 
 
 # ---------------------------------------------------------------------------
@@ -51,14 +50,19 @@ def embed_chunks(chunks: List[dict]) -> List[dict]:
     if not chunks:
         return chunks
 
-    model = _get_model()
-    texts = [c["text"] for c in chunks]
+    client = _get_client()
+    texts  = [c["text"] for c in chunks]
 
-    # batch encode; normalize=True gives cosine-comparable unit vectors
-    vectors = model.encode(texts, batch_size=64, normalize_embeddings=True)
+    # Process in batches to stay within API limits
+    vectors: list[list[float]] = []
+    for i in range(0, len(texts), BATCH_SIZE):
+        batch = texts[i : i + BATCH_SIZE]
+        response = client.embeddings.create(model=EMBED_MODEL, input=batch)
+        # Response items are in the same order as input
+        vectors.extend([item.embedding for item in response.data])
 
     for chunk, vec in zip(chunks, vectors):
-        chunk["embedding"] = vec.tolist()
+        chunk["embedding"] = vec
 
     return chunks
 
@@ -66,14 +70,7 @@ def embed_chunks(chunks: List[dict]) -> List[dict]:
 def store_chunks(document_id: int, chunks: List[dict], db_url: str | None = None) -> int:
     """Insert embedded chunks into the database.
 
-    Requires the 'chunks' table to exist (see docs/schema.sql).
-    Deletes any existing chunks for document_id before inserting,
-    so this function is safely re-entrant (re-processing the same document).
-
-    Args:
-        document_id: FK to the documents table.
-        chunks:      Output of embed_chunks() — must have "embedding" key.
-        db_url:      PostgreSQL DSN. Defaults to DATABASE_URL env var.
+    Deletes any existing chunks for document_id before inserting (idempotent).
 
     Returns:
         Number of rows inserted.
@@ -85,23 +82,15 @@ def store_chunks(document_id: int, chunks: List[dict], db_url: str | None = None
     try:
         with conn:
             with conn.cursor() as cur:
-                # Remove stale data for this document (idempotent re-runs)
                 cur.execute("DELETE FROM chunks WHERE document_id = %s", (document_id,))
 
                 if not chunks:
                     return 0
 
                 rows = [
-                    (
-                        document_id,
-                        c["page"],
-                        c["index"],
-                        c["text"],
-                        c["embedding"],
-                    )
+                    (document_id, c["page"], c["index"], c["text"], c["embedding"])
                     for c in chunks
                 ]
-
                 cur.executemany(
                     """
                     INSERT INTO chunks (document_id, page, chunk_index, text, embedding)
@@ -115,38 +104,6 @@ def store_chunks(document_id: int, chunks: List[dict], db_url: str | None = None
 
 
 def embed_and_store(document_id: int, chunks: List[dict], db_url: str | None = None) -> int:
-    """Convenience wrapper: embed then store in one call.
-
-    Returns:
-        Number of chunks stored.
-    """
+    """Convenience wrapper: embed then store in one call."""
     embedded = embed_chunks(chunks)
     return store_chunks(document_id, embedded, db_url)
-
-
-# ---------------------------------------------------------------------------
-# Manual test
-# ---------------------------------------------------------------------------
-
-if __name__ == "__main__":
-    import sys
-    import json
-
-    sample = [
-        {"page": 1, "index": 0, "text": "This is the first chunk of text from the PDF."},
-        {"page": 1, "index": 1, "text": "Another chunk with different content about machine learning."},
-        {"page": 2, "index": 0, "text": "A third chunk on page two discussing neural networks."},
-    ]
-
-    print(f"Embedding {len(sample)} sample chunks with model '{MODEL_NAME}'...")
-    result = embed_chunks(sample)
-
-    for r in result:
-        vec_preview = r["embedding"][:6]
-        print(f"  [P{r['page']}-{r['index']}] dim={len(r['embedding'])}  "
-              f"first 6 values: {[round(v, 4) for v in vec_preview]}")
-
-    if "--store" in sys.argv:
-        doc_id = int(sys.argv[sys.argv.index("--store") + 1])
-        stored = store_chunks(doc_id, result)
-        print(f"\nStored {stored} chunks for document_id={doc_id}")
