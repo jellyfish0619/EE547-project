@@ -256,7 +256,9 @@ def document_concepts(
 
     # Return cached version unless regenerate=true
     if d.concepts and not regenerate:
-        return {"id": doc_id, "filename": d.filename, "concepts": d.concepts, "cached": True}
+        import json
+        concepts_data = json.loads(d.concepts) if isinstance(d.concepts, str) else d.concepts
+        return {"id": doc_id, "filename": d.filename, "concepts": concepts_data, "cached": True}
 
     from api.config import get_settings
     from worker.llm import extract_concepts
