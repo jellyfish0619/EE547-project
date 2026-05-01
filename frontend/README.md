@@ -1,280 +1,167 @@
-# CourseMate Frontend
+# CourseMate — Frontend
 
-## 项目简介
-
-CourseMate 是一个 AI 驱动的课程助手，支持上传课程 PDF、智能问答和自动生成测验。
-
-后端 API 已经完成，前端需要实现以下页面和功能。
+Static HTML/CSS/JavaScript application served by Nginx.
+No build step required — files are served directly.
 
 ---
 
-## 页面结构
+## Directory Structure
 
 ```
 frontend/
-  ├── index.html        登录 / 注册
-  ├── dashboard.html    课程列表
-  ├── course.html       课程详情 + 上传文档
-  ├── qa.html           问答界面
-  ├── quiz.html         测验界面
-  ├── css/
-  │   └── style.css
-  └── js/
-      └── api.js        所有 fetch 调用封装在这里
+├── index.html        # Login / Register page
+├── dashboard.html    # Course list page
+├── course.html       # Course detail: documents, summary, Q&A, quiz (main page)
+├── css/
+│   └── style.css     # Global styles
+└── js/
+    └── api.js        # All API calls encapsulated here (ES module)
 ```
 
 ---
 
-## 后端 API 地址
+## Pages
 
-本地开发时：`http://localhost:8000`
+### `index.html` — Login / Register
+- Toggle between login and register forms
+- On success: stores `access_token` in `localStorage`, redirects to `dashboard.html`
 
-所有需要登录的接口都要在请求头带上 token：
-```
-Authorization: Bearer <access_token>
-```
+### `dashboard.html` — Course List
+- Lists all courses for the logged-in user
+- Create new course (name + description)
+- Delete course
+- Click a course to go to `course.html?course_id=<id>`
 
-完整接口文档可以在 `http://localhost:8000/docs` 查看。
+### `course.html` — Course Detail (main interface)
+All learning features are on this single page, organized into sections:
 
----
-
-## 各页面功能说明
-
-### 1. `index.html` — 登录 / 注册
-
-**注册**
-```
-POST /auth/register
-Body: { "email": "...", "password": "..." }
-返回: { "access_token": "...", "token_type": "bearer" }
-```
-
-**登录**
-```
-POST /auth/login
-Body: { "email": "...", "password": "..." }
-返回: { "access_token": "...", "token_type": "bearer" }
-```
-
-登录/注册成功后，把 `access_token` 存到 `localStorage`，然后跳转到 `dashboard.html`。
+| Section | Features |
+|---------|----------|
+| **Documents** | Upload PDF, view processing status, delete documents |
+| **Summary** | Section-level AI summary per document |
+| **Knowledge Map** | Structured Markdown outline of the document; click to regenerate |
+| **Study Mode** | Page-by-page reader with "Explain This Page" AI button |
+| **Concept Cards** | Grid of key terms with definitions, formulas, examples |
+| **Q&A** | Ask questions with RAG; shows sources; history with delete |
+| **Quiz** | Full-screen modal: generate → answer → submit → review results |
 
 ---
 
-### 2. `dashboard.html` — 课程列表
+## `api.js` — API Client
 
-**获取课程列表**
-```
-GET /courses
-返回: [{ "id": 1, "name": "...", "description": "...", "created_at": "..." }]
-```
+All fetch calls are encapsulated in `js/api.js` as an exported `api` object.
 
-**创建课程**
-```
-POST /courses
-Body: { "name": "ECE 510", "description": "Linear Algebra" }
-返回: { "id": 1, "name": "...", ... }
-```
+**Authentication** is handled automatically — every request includes the Bearer token from `localStorage`.
 
-**删除课程**
-```
-DELETE /courses/{course_id}
-```
+**Math rendering** uses MathJax (loaded from CDN). Markdown is rendered with marked.js. A math-stash technique protects LaTeX expressions (`\(…\)`, `\[…\]`) from being escaped by the Markdown parser.
 
----
+### Available API methods
 
-### 3. `course.html` — 课程详情 + 上传文档
+```javascript
+// Auth
+api.register(email, password)
+api.login(email, password)
 
-URL 参数：`?course_id=1`
+// Courses
+api.getCourses()
+api.createCourse(name, description)
+api.getCourseDetail(courseId)
+api.deleteCourse(courseId)
 
-**获取课程详情（含文档列表）**
-```
-GET /courses/{course_id}
-返回: {
-  "id": 1,
-  "name": "...",
-  "documents": [
-    { "id": 1, "filename": "lecture1.pdf", "status": "ready" }
-  ]
-}
-```
+// Documents
+api.uploadDocument(courseId, file, autoSummary)
+api.getDocumentStatus(docId)
+api.getDocumentSummary(docId)
+api.deleteDocument(docId)
 
-文档 status 说明：
-| status | 含义 |
-|---|---|
-| `pending` | 等待处理 |
-| `processing` | 正在解析 + 生成向量 |
-| `ready` | 处理完成，可以问答 |
-| `failed` | 处理失败 |
+// Learning features
+api.getKnowledgeMap(docId, regenerate)     // regenerate=true to force refresh
+api.explainPage(docId, page)
+api.getConcepts(docId, regenerate)
 
-**上传 PDF**
-```
-POST /courses/{course_id}/documents
-Content-Type: multipart/form-data
-字段:
-  file         PDF 文件（必填）
-  auto_summary true/false（是否自动生成摘要，默认 true）
-返回: { "id": 1, "filename": "...", "status": "pending" }
+// Q&A
+api.askQuestion(courseId, question, documentId)
+api.getQAHistory(courseId)
+api.deleteQA(courseId, qaId)
+api.clearQAHistory(courseId)
+
+// Quiz
+api.generateQuiz(courseId, numQuestions, documentId, difficulty)
+api.submitQuiz(sessionId, answers)
+api.getQuizResult(sessionId)
+api.getQuizHistory(courseId)
+api.deleteQuizAttempt(courseId, sessionId)
 ```
 
-上传后 status 是 `pending`，需要轮询状态直到变成 `ready`：
-```
-GET /documents/{doc_id}/status
-返回: { "id": 1, "filename": "...", "status": "ready" }
-```
+### Navigation helpers
 
-**查看文档摘要**（status 为 ready 且开启了 auto_summary 才有）
-```
-GET /documents/{doc_id}/summary
-返回: { "id": 1, "filename": "...", "summary": "这门课主要讲..." }
-```
-
-**删除文档**
-```
-DELETE /documents/{doc_id}
+```javascript
+getCourseIdFromUrl()          // reads ?course_id= from URL
+goToCourse(courseId)
+goToQA(courseId)
+goToQuiz(courseId)
 ```
 
 ---
 
-### 4. `qa.html` — 问答界面
+## Quiz — Question Types
 
-URL 参数：`?course_id=1`
+The quiz modal supports three question types:
 
-**提问**
-```
-POST /courses/{course_id}/qa
-Body: {
-  "question": "What is Gaussian elimination?",
-  "document_id": 1    // 可选，不传则搜索课程所有文档
-}
-返回: {
-  "answer": "Gaussian elimination is...",
-  "sources": [
-    { "filename": "lecture1.pdf", "page_number": 5, "content": "..." }
-  ]
-}
-```
+| Type | Input | Grading |
+|------|-------|---------|
+| `mcq` | Radio buttons (A/B/C/D) | Instant, local |
+| `short_answer` | Textarea | GPT-graded on submit |
+| `calculation` | Textarea + math symbol toolbar | GPT-graded on submit |
 
-`sources` 是 AI 回答所引用的原文，建议在回答下方展示出处。
-
-**获取历史问答记录**
-```
-GET /courses/{course_id}/qa
-返回: [{ "id": 1, "question": "...", "answer": "...", "created_at": "..." }]
-```
+The calculation input includes a toolbar with 25 common math symbols (exponents, fractions, integrals, Greek letters, etc.) and a live LaTeX preview powered by MathJax.
 
 ---
 
-### 5. `quiz.html` — 测验界面
+## Key Frontend Patterns
 
-URL 参数：`?course_id=1`
+### Markdown + LaTeX rendering
 
-**生成测验**
-```
-POST /courses/{course_id}/quiz/generate
-Body: {
-  "num_questions": 5,      // 1-30，默认 5
-  "document_id": 1         // 可选，不传则从所有文档出题
-}
-返回: {
-  "session_id": "uuid...",
-  "questions": [
-    {
-      "id": 1,
-      "question": "What is...",
-      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-      "answer": "B"         // 正确答案（注意：展示题目时不要显示这个字段）
-    }
-  ]
-}
+MathJax and marked.js are both loaded. To prevent marked.js from escaping LaTeX backslashes, the `renderMarkdown(el, text)` function:
+1. Extracts all math expressions (`\(…\)`, `\[…\]`, `$…$`, `$$…$$`) and replaces them with unique placeholders
+2. Runs `marked.parse()` on the result
+3. Restores the original math expressions
+4. Calls `MathJax.typesetPromise()` to render
+
+### Document status polling
+
+After uploading a PDF, the frontend polls `GET /documents/{id}/status` every 3 seconds until `status` is `ready` or `failed`.
+
+### ES Module caching
+
+`api.js` is imported as an ES module with a cache-busting version query:
+```javascript
+import { api, getCourseIdFromUrl } from "./js/api.js?v=2";
 ```
 
-**提交答案**
-```
-POST /quiz/{session_id}/submit
-Body: {
-  "answers": [
-    { "question_id": 1, "answer": "B" },
-    { "question_id": 2, "answer": "A" }
-  ]
-}
-返回: {
-  "session_id": "uuid...",
-  "score": 3,
-  "total": 5,
-  "results": [
-    { "question_id": 1, "correct": true, "correct_answer": "B", "user_answer": "B" },
-    { "question_id": 2, "correct": false, "correct_answer": "C", "user_answer": "A" }
-  ]
-}
-```
-
-**查看某次测验的错题详情**
-```
-GET /quiz/{session_id}/result
-返回: {
-  "session_id": "uuid...",
-  "score": 3,
-  "total": 5,
-  "created_at": "...",
-  "questions": [
-    {
-      "question_id": 1,
-      "question": "What is...",
-      "options": ["A. ...", "B. ...", "C. ...", "D. ..."],
-      "correct_answer": "B",
-      "user_answer": "A",
-      "correct": false
-    }
-  ]
-}
-```
-
-**查看历史测验记录**
-```
-GET /courses/{course_id}/quiz/history
-返回: [{ "session_id": "uuid...", "score": 3, "total": 5, "created_at": "..." }]
-```
+If JS changes don't appear in the browser, do a hard refresh: **Cmd+Shift+R** (Mac) or **Ctrl+Shift+R** (Windows).
 
 ---
 
-## `api.js` 封装建议
+## Configuration
 
-所有接口调用统一写在 `api.js`，示例结构：
+The API base URL is set at the top of `js/api.js`:
 
 ```javascript
 const API_BASE = "http://localhost:8000";
+```
 
-function getToken() {
-  return localStorage.getItem("access_token");
-}
+Change this to your EC2 public IP or domain for production:
 
-async function apiFetch(path, options = {}) {
-  const res = await fetch(API_BASE + path, {
-    ...options,
-    headers: {
-      "Authorization": `Bearer ${getToken()}`,
-      ...options.headers,
-    },
-  });
-  if (!res.ok) throw await res.json();
-  return res.json();
-}
-
-// 示例
-export const api = {
-  login:      (email, password) => apiFetch("/auth/login", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({email, password}) }),
-  getCourses: ()                 => apiFetch("/courses"),
-  createCourse: (name, desc)    => apiFetch("/courses", { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({name, description: desc}) }),
-  askQuestion: (courseId, question, documentId) => apiFetch(`/courses/${courseId}/qa`, { method: "POST", headers: {"Content-Type":"application/json"}, body: JSON.stringify({question, document_id: documentId}) }),
-  // ... 其他接口
-};
+```javascript
+const API_BASE = "http://52.35.208.152:8000";
 ```
 
 ---
 
-## 开发注意事项
+## External Libraries (CDN, no install required)
 
-1. **token 管理**：登录后存 `localStorage`，每次请求带上；退出登录时清除
-2. **状态轮询**：上传 PDF 后每隔 3 秒查一次 `/documents/{id}/status`，直到变成 `ready` 或 `failed`
-3. **Quiz 答案隐藏**：生成题目时后端会返回正确答案，前端展示题目时不要显示 `answer` 字段，提交后再显示对错
-4. **跨域**：本地开发如果遇到 CORS 问题，告知后端在 `api/main.py` 里加 `CORSMiddleware`
+| Library | Purpose |
+|---------|---------|
+| [MathJax 3](https://www.mathjax.org/) | LaTeX math rendering |
+| [marked.js 9](https://marked.js.org/) | Markdown → HTML |

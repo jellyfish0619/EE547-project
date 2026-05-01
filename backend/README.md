@@ -1,247 +1,248 @@
-# CourseMate Backend
+# CourseMate — Backend
 
-FastAPI 服务 + 异步文档处理 Worker（PDF 解析、chunk、pgvector 嵌入）。数据库建表语句在仓库根目录 **`docs/schema.sql`**（与 `docker-compose` 中的 Postgres 初始化一致）。
+FastAPI HTTP API + async document processing Worker.
 
 ---
 
-## 目录结构
+## Directory Structure
 
 ```
 backend/
-├── api/                      # HTTP API（容器内 PYTHONPATH=/app）
-│   ├── main.py               # FastAPI 入口，挂载路由
-│   ├── config.py             # 环境变量（Settings）
-│   ├── database.py           # SQLAlchemy engine / Session
-│   ├── models.py             # ORM 与 docs/schema.sql 对齐
-│   ├── schemas.py            # Pydantic 请求/响应体
-│   ├── deps.py               # get_db、JWT get_current_user
-│   ├── security.py           # bcrypt、JWT 签发与校验
-│   ├── util.py               # 如文档状态对外统一展示
+├── api/                      # HTTP API (PYTHONPATH=/app inside container)
+│   ├── main.py               # FastAPI app: mounts routers, configures CORS
+│   ├── config.py             # Pydantic Settings — reads from .env
+│   ├── database.py           # SQLAlchemy engine, SessionLocal, Base
+│   ├── models.py             # ORM models (must stay in sync with docs/schema.sql)
+│   ├── schemas.py            # Pydantic request/response models
+│   ├── deps.py               # get_db(), get_current_user() dependencies
+│   ├── security.py           # Password hashing (bcrypt), JWT sign/verify
+│   ├── util.py               # Shared helpers (e.g. public_document_status)
 │   └── routers/
-│       ├── auth.py           # 注册 / 登录 / 当前用户
-│       ├── courses.py        # 课程 CRUD
-│       ├── documents.py      # PDF 上传、列表、状态、摘要、删除
-│       ├── qa.py             # RAG 问答与历史
-│       └── quiz.py           # 测验生成、提交、历史
-├── worker/                   # SQS 消费或本地管道
-│   ├── main.py               # SQS 轮询 或 --local 跑单文件
-│   ├── pdf_parser.py         # PDF → 文本 chunk
-│   ├── embedder.py           # 向量写入 PostgreSQL（pgvector）
-│   └── llm.py                # RAG：search_and_answer、generate_quiz、摘要更新
+│       ├── auth.py           # /auth/register, /auth/login, /auth/me
+│       ├── courses.py        # Course CRUD
+│       ├── documents.py      # PDF upload, status, summary, knowledge-map, concepts, explain
+│       ├── qa.py             # RAG Q&A + history management
+│       └── quiz.py           # Quiz generation, submission, grading, history
+├── worker/
+│   ├── main.py               # Entry point: --local mode or SQS consumer loop
+│   ├── pdf_parser.py         # PDF → list of {page, index, text} chunks
+│   ├── embedder.py           # Calls OpenAI Embeddings API → stores in pgvector
+│   └── llm.py                # All LLM logic: RAG, quiz, summaries, concepts, knowledge map
 ├── Dockerfile
-├── requirements.txt
-└── README.md                 # 本文件
+└── requirements.txt
 ```
 
 ---
 
-## 配置与环境变量
+## Environment Variables
 
-| 变量 | 说明 |
-|------|------|
-| `DATABASE_URL` | 数据库连接串。API 侧可用 `postgresql+psycopg2://...`；Worker 内会自动规范为 `postgresql://...` 供 `psycopg2` 使用。 |
-| `JWT_SECRET` | JWT 签名密钥（生产环境务必修改）。 |
-| `OPENAI_API_KEY` | 问答、测验、文档摘要（Worker 写 `documents.summary`）需要。未配置时问答/测验接口会返回 `503`。 |
-| `OPENAI_CHAT_MODEL` | 可选，默认 `gpt-4o-mini`。 |
-| `S3_BUCKET_NAME` | 若配置：上传写入 S3，SQS 消息带 `s3_key`。 |
-| `SQS_QUEUE_URL` | 若配置：上传后发消息，由 Worker 异步处理；若未配置且无 S3，API 会 **子进程** 调用 `worker/main.py --local` 处理。 |
-| `AWS_REGION` | 默认 `us-east-1`。 |
-| `LOCAL_UPLOAD_DIR` | 本机暂存 PDF，默认 `/app/data/uploads`；`docker-compose` 中通过命名卷 `uploads` 挂载，供 API 与 Worker 共享。 |
-
-仓库根目录 **`docker-compose.yml`** 已挂载 `uploads` 卷到 API 与 Worker，便于「SQS + 本地路径」模式。
-
----
-
-## 运行
-
-- **推荐**：在仓库根目录执行 `docker compose up`（API：`uvicorn api.main:app --host 0.0.0.0 --port 8000`；Worker：`python worker/main.py`）。
-- 本地开发（需已安装 `requirements.txt`、Postgres + pgvector）：在 `backend` 的上一级或设 `PYTHONPATH` 指向 `backend` 的父目录使 `api` / `worker` 可导入，例如  
-  `PYTHONPATH=. uvicorn api.main:app --reload`（工作目录为 **`backend`**）。
-
-健康检查：`GET /health`。
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `DATABASE_URL` | ✅ | SQLAlchemy DSN. API uses `postgresql+psycopg2://...`; worker normalizes to `postgresql://...` automatically |
+| `JWT_SECRET` | ✅ | Secret key for signing JWTs. Must be changed in production |
+| `OPENAI_API_KEY` | ✅ | Used for embeddings, Q&A, quiz generation, summaries, and concept extraction |
+| `OPENAI_CHAT_MODEL` | | LLM model name, default `gpt-4o-mini` |
+| `OPENAI_EMBED_MODEL` | | Embedding model, default `text-embedding-3-small` |
+| `LOCAL_UPLOAD_DIR` | | Where uploaded PDFs are stored, default `/app/data/uploads` |
+| `S3_BUCKET_NAME` | | If set, PDFs are stored in S3 instead of local disk |
+| `SQS_QUEUE_URL` | | If set, worker is triggered via SQS messages; otherwise API spawns a local subprocess |
+| `AWS_REGION` | | AWS region, default `us-east-1` |
 
 ---
 
-## API 约定
+## Running Locally (without Docker)
 
-- **Base URL**：`http://localhost:8000`（compose 映射端口以实际为准）。
-- **鉴权**：标有 🔒 的接口需在请求头携带  
-  `Authorization: Bearer <access_token>`。
-- **ID 类型**：数据库主键为 **自增整数**（`users.id`、`courses.id`、`documents.id` 等）；JSON 中为数字。测验的 `session_id` 为 **UUID** 字符串。
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+
+# Set environment variables
+export DATABASE_URL="postgresql+psycopg2://postgres:password@localhost:5432/coursemate"
+export OPENAI_API_KEY="sk-..."
+export JWT_SECRET="dev-secret"
+
+# Run API
+PYTHONPATH=. uvicorn api.main:app --reload --port 8000
+
+# Run worker (separate terminal)
+PYTHONPATH=. python worker/main.py
+```
+
+Health check: `GET http://localhost:8000/health`
 
 ---
 
-## API 参考 — `api/routers/auth.py`
+## Document Processing Pipeline
 
-### POST `/auth/register`
+When a PDF is uploaded:
 
-**请求**
+1. **API** saves the file to `LOCAL_UPLOAD_DIR` and creates a `documents` record with `status=pending`
+2. **API** spawns `worker/main.py --local <path> <doc_id>` as a subprocess
+3. **Worker** parses the PDF into text chunks (`pdf_parser.py`)
+4. **Worker** calls OpenAI Embeddings API to embed each chunk, stores in `chunks` table (`embedder.py`)
+5. **Worker** sets `status=ready`
+6. **Worker** generates a section-level summary using GPT and stores in `documents.summary`
 
+Knowledge maps and concept cards are generated on first access and cached in `documents.knowledge_map` and `documents.concepts`.
+
+---
+
+## API Reference
+
+### Auth — `routers/auth.py`
+
+#### `POST /auth/register`
 ```json
-{
-  "email": "user@example.com",
-  "password": "yourpassword"
+Request:  { "email": "user@example.com", "password": "secret" }
+Response: { "access_token": "...", "token_type": "bearer" }
+```
+
+#### `POST /auth/login`
+```json
+Request:  { "email": "user@example.com", "password": "secret" }
+Response: { "access_token": "...", "token_type": "bearer" }
+```
+
+#### `GET /auth/me` 🔒
+```json
+Response: { "id": 1, "email": "user@example.com", "created_at": "..." }
+```
+
+---
+
+### Courses — `routers/courses.py`
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/courses` | List all courses for current user |
+| POST | `/courses` | Create a course (`name`, `description`) |
+| GET | `/courses/{course_id}` | Course detail + document list |
+| DELETE | `/courses/{course_id}` | Delete course and all associated data |
+
+---
+
+### Documents — `routers/documents.py`
+
+#### `POST /courses/{course_id}/documents` 🔒
+Upload a PDF. Accepts `multipart/form-data` with:
+- `file` — the PDF file
+- `auto_summary` — boolean, default `true`
+
+Returns `202 Accepted` with `{ "id": ..., "filename": ..., "status": "pending" }`.
+
+#### `GET /documents/{doc_id}/status` 🔒
+Poll until `status` is `ready` or `failed`.
+
+#### `GET /documents/{doc_id}/summary` 🔒
+Returns the section-level summary (requires `status=ready`).
+
+#### `GET /documents/{doc_id}/knowledge-map` 🔒
+Returns a structured Markdown outline. Generated on first call and cached.
+Pass `?regenerate=true` to force regeneration.
+
+#### `GET /documents/{doc_id}/concepts` 🔒
+Returns a JSON array of concept objects:
+```json
+[
+  {
+    "term": "Gradient Descent",
+    "definition": "...",
+    "example": "...",
+    "formula": "w = w - α∇L",
+    "related": ["Learning Rate", "Loss Function"]
+  }
+]
+```
+Cached after first generation. Pass `?regenerate=true` to refresh.
+
+#### `GET /documents/{doc_id}/pages/{page}/explain` 🔒
+Returns an AI explanation of a specific page:
+```json
+{ "page": 5, "max_page": 30, "raw": "...", "explanation": "..." }
+```
+
+#### `DELETE /documents/{doc_id}` 🔒
+Deletes the document and all associated chunks.
+
+---
+
+### Q&A — `routers/qa.py`
+
+#### `POST /courses/{course_id}/qa` 🔒
+```json
+Request:  { "question": "What is backpropagation?", "document_id": 1 }
+Response: {
+  "answer": "...",
+  "sources": [
+    { "filename": "lecture5.pdf", "page_number": 12, "content": "..." }
+  ]
 }
 ```
+`document_id` is optional. Omit to search across all ready documents in the course.
 
-**响应 `201`**：`access_token`、`token_type`（`bearer`）。
+If the topic is not found in the lecture materials, the answer will be prefixed with a warning note.
 
-**错误**：`400` 邮箱已被注册。
+#### `GET /courses/{course_id}/qa` 🔒
+Returns Q&A history for the current user in the course.
 
-### POST `/auth/login`
+#### `DELETE /courses/{course_id}/qa/{qa_id}` 🔒
+Delete a single Q&A record.
 
-**请求**：同上（email + password）。
+#### `DELETE /courses/{course_id}/qa` 🔒
+Clear all Q&A history for the course.
 
-**响应 `200`**：Token。
+---
 
-**错误**：`401` 邮箱或密码错误。
+### Quiz — `routers/quiz.py`
 
-### GET `/auth/me` 🔒
-
-**响应 `200`**
-
+#### `POST /courses/{course_id}/quiz/generate` 🔒
 ```json
-{
-  "id": 1,
-  "email": "user@example.com",
-  "created_at": "2024-01-01T00:00:00"
+Request: {
+  "num_questions": 5,
+  "document_id": null,
+  "difficulty": "medium"
 }
 ```
+- `difficulty`: `"easy"` | `"medium"` | `"hard"`
+- Returns `session_id` (UUID) and `questions` array
 
----
+Question types:
+- `mcq` — 4-choice multiple choice, graded locally
+- `short_answer` — open text, graded by LLM
+- `calculation` — math problem, graded by LLM
 
-## API 参考 — `api/routers/courses.py`
-
-### GET `/courses` 🔒
-
-当前用户的课程列表（含 `description`）。
-
-### POST `/courses` 🔒
-
-**请求**：`name`、`description`（可选，默认空字符串）。
-
-### GET `/courses/{course_id}` 🔒
-
-课程详情及 `documents` 简要列表（`id`、`filename`、`status`）。
-
-### DELETE `/courses/{course_id}` 🔒
-
-删除课程及关联文档、chunk 等。
-
----
-
-## API 参考 — `api/routers/documents.py`
-
-### POST `/courses/{course_id}/documents` 🔒
-
-上传 PDF（`multipart/form-data`，字段 `file`）。
-
-- 配置 **S3 + SQS** 时：写入 S3，并发 SQS 消息（`document_id` + `s3_key`），立即 `202` 返回。
-- 仅 **SQS** 时：文件落在共享目录，消息体含 `local_path`。
-- **均未配置** 时：写入 `LOCAL_UPLOAD_DIR`，由 API **异步子进程** 执行 `python worker/main.py --local <path> <document_id>`。
-
-**响应 `202`**：`id`、`filename`、`status`（一般为 `pending`）。
-
-### GET `/courses/{course_id}/documents` 🔒
-
-文档列表，含 `uploaded_at`（对应库表 `created_at`）。
-
-### GET `/documents/{doc_id}/status` 🔒
-
-状态：`pending` | `processing` | `ready` | `failed`（历史数据如曾为 `error` 会在响应中显示为 `failed`）。
-
-### GET `/documents/{doc_id}/summary` 🔒
-
-需 `ready` 且已成功写入 `summary`。否则可能 `400`（未完成或摘要不可用）。
-
-### DELETE `/documents/{doc_id}` 🔒
-
-删除文档及其 chunk。
-
----
-
-## API 参考 — `api/routers/qa.py`
-
-### POST `/courses/{course_id}/qa` 🔒
-
-RAG 问答。逻辑在 **`worker/llm.py`** 的 `search_and_answer()`。
-
-**请求**
-
+#### `POST /quiz/{session_id}/submit` 🔒
 ```json
-{
-  "question": "什么是梯度下降？",
-  "document_id": "12"
+Request: {
+  "answers": [
+    { "question_id": 1, "answer": "B" },
+    { "question_id": 2, "answer": "The derivative of x² is 2x" }
+  ]
 }
 ```
+MCQ answers are graded instantly. Short answer and calculation answers are sent to GPT for grading in a single batch call.
 
-`document_id` 可选：不传则检索该课程下所有 **已 ready** 文档。
+#### `GET /quiz/{session_id}/result` 🔒
+Detailed results including per-question feedback, correct answers, and explanations.
 
-**响应**：`answer` + `sources`（`filename`、`page_number`、`content`）。
+#### `GET /courses/{course_id}/quiz/history` 🔒
+List of past quiz attempts with score and timestamp.
 
-**错误**：`400` 课程下无已处理文档；`503` 未配置 OpenAI。
-
-### GET `/courses/{course_id}/qa` 🔒
-
-当前用户在该课程下的问答历史。
-
----
-
-## API 参考 — `api/routers/quiz.py`
-
-### POST `/courses/{course_id}/quiz/generate` 🔒
-
-由 **`worker/llm.py`** 的 `generate_quiz()` 基于材料生成选择题。
-
-**请求**：`num_questions`（可选）、`document_id`（可选）。
-
-**响应 `201`**：`session_id`（UUID）、`questions`（含 `id`、`question`、`options`、`answer`）。
-
-### POST `/quiz/{session_id}/submit` 🔒
-
-提交答案；须覆盖该会话中的全部题目各一次。
-
-**响应**：`score`、`total`、每题 `correct` / `correct_answer`。
-
-### GET `/courses/{course_id}/quiz/history` 🔒
-
-该课程下当前用户的测验提交记录。
+#### `DELETE /courses/{course_id}/quiz/{session_id}` 🔒
+Delete a quiz attempt record.
 
 ---
 
-## Worker 与 LLM 接口（`worker/llm.py`）
+## LLM Functions (`worker/llm.py`)
 
-API 中的问答与测验直接调用以下函数（参数 `db` 为 SQLAlchemy `Session`）：
-
-```python
-def search_and_answer(
-    question: str,
-    course_id: str,
-    db,
-    document_id: str | None = None,
-) -> dict:
-    """
-    返回：
-    {
-        "answer": str,
-        "sources": [
-            {"filename": str, "page_number": int, "content": str},
-        ],
-    }
-    """
-```
-
-```python
-def generate_quiz(
-    course_id: str,
-    db,
-    num_questions: int = 5,
-    document_id: str | None = None,
-) -> list:
-    """
-    返回：
-    [{"id": int, "question": str, "options": list[str], "answer": str}]
-    """
-```
-
-文档处理完成后，Worker 会在具备 `OPENAI_API_KEY` 时尝试调用 `update_document_summary()` 填充 `documents.summary`。
+| Function | Description |
+|----------|-------------|
+| `search_and_answer(question, course_id, db, document_id)` | RAG: embed question → cosine search → GPT answer |
+| `generate_quiz(course_id, db, num_questions, document_id, difficulty)` | Generate mixed-type quiz questions from chunks |
+| `grade_open_answers(items)` | Batch-grade short answer and calculation responses |
+| `update_document_summary(document_id, db_url)` | Generate section-level summaries and store |
+| `generate_knowledge_map(document_id, db_url)` | Generate structured Markdown knowledge outline |
+| `explain_page(document_id, page, db_url)` | Explain a single page with context |
+| `extract_concepts(document_id, db_url)` | Extract key terms as structured JSON |
